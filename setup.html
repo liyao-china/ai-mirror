@@ -291,16 +291,27 @@
           </div>
 
           <!-- 本次岗位 JD（必填） -->
-          <div>
+          <div id="jd-section">
             <label class="block text-sm font-medium text-gray-700 mb-1.5">
               本次岗位 JD <span class="required-star">*</span>
               <span class="text-[11px] text-orange-400 font-normal ml-1">每场需重新提供</span>
             </label>
             <textarea id="jd-text" rows="5" placeholder="请粘贴目标岗位的职位描述..." class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-y mb-2"></textarea>
-            <button type="button" id="upload-jd-img" class="text-sm text-primary hover:text-indigo-400 flex items-center gap-1 transition-colors">
-              🖼️ 上传 JD 图片并由 AI 解析
-            </button>
+            <!-- 粘贴 / 上传图片区域 -->
+            <div id="jd-paste-zone" class="rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-300 transition-colors p-4 text-center cursor-pointer" onclick="document.getElementById('jd-image-input').click()">
+              <div class="text-sm text-gray-500">
+                <span class="text-primary font-medium">📋 直接 Ctrl+V 粘贴 JD 截图</span>
+                <span class="text-gray-400 mx-1">或</span>
+                <button type="button" class="text-indigo-500 hover:text-indigo-700 transition-colors underline" onclick="event.stopPropagation(); document.getElementById('jd-image-input').click();">点击上传图片</button>
+              </div>
+              <div class="text-[11px] text-gray-400 mt-1">粘贴或上传后，AI 会自动解析图片内容并填入上方</div>
+            </div>
             <input type="file" id="jd-image-input" accept="image/*" class="hidden">
+            <!-- 粘贴图片预览 -->
+            <div id="jd-paste-preview" class="hidden mt-3 relative inline-block">
+              <img id="jd-paste-img" class="max-h-32 rounded-lg border border-gray-200" alt="粘贴的JD图片">
+              <button type="button" onclick="clearJDPastePreview()" class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center shadow-md hover:bg-red-600">✕</button>
+            </div>
           </div>
         </section>
 
@@ -943,46 +954,103 @@
     }
 
     // ===========================
-    // JD 图片上传 + AI 解析
+    // JD 图片上传 + AI 解析（支持粘贴）
     // ===========================
 
     function initJDImageUpload() {
-      const btn = document.getElementById('upload-jd-img');
       const input = document.getElementById('jd-image-input');
+      const jdText = document.getElementById('jd-text');
+      const pasteZone = document.getElementById('jd-paste-zone');
 
-      btn.onclick = () => input.click();
+      // 文件上传
       input.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
         input.value = '';
-
-        btn.textContent = '⏳ AI 解析中...';
-        btn.disabled = true;
-
-        try {
-          const base64 = await fileToBase64(file);
-          const messages = [
-            { role: 'system', content: '你是一个职位描述解析助手。请从图片中提取完整的职位描述信息，包括岗位名称、要求、职责等，以纯文本形式输出。' },
-            { role: 'user', content: [
-              { type: 'text', text: '请提取图片中的职位描述（JD）信息：' },
-              { type: 'image_url', image_url: { url: base64 } }
-            ]}
-          ];
-          const result = await AIProxy.vision(messages);
-          if (result && result.trim()) {
-            document.getElementById('jd-text').value = result.trim();
-            updateSummary();
-          } else {
-            alert('AI 未能解析出内容，请手动粘贴 JD');
-          }
-        } catch (err) {
-          console.error('[配置页] JD 图片解析失败:', err);
-          alert('AI 解析失败，请手动粘贴 JD');
-        } finally {
-          btn.innerHTML = '🖼️ 上传 JD 图片并由 AI 解析';
-          btn.disabled = false;
-        }
+        await doJDParse(file);
       });
+
+      // 支持在 JD 输入框、粘贴区域及整个 JD 区块粘贴图片
+      jdText.addEventListener('paste', handleJDPaste);
+      if (pasteZone) pasteZone.addEventListener('paste', handleJDPaste);
+      document.getElementById('jd-section').addEventListener('paste', handleJDPaste);
+    }
+
+    /** 处理粘贴事件 */
+    async function handleJDPaste(e) {
+      const items = e.clipboardData && e.clipboardData.items;
+      if (!items) return;
+
+      let imageFile = null;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          imageFile = items[i].getAsFile();
+          break;
+        }
+      }
+
+      if (!imageFile) return;
+      e.preventDefault(); // 阻止图片被粘贴进 textarea
+
+      // 显示预览
+      showJDPastePreview(imageFile);
+      // 开始解析
+      await doJDParse(imageFile);
+    }
+
+    /** 显示粘贴图片预览 */
+    function showJDPastePreview(file) {
+      const preview = document.getElementById('jd-paste-preview');
+      const img = document.getElementById('jd-paste-img');
+      const url = URL.createObjectURL(file);
+      img.src = url;
+      preview.classList.remove('hidden');
+    }
+
+    /** 清除粘贴预览 */
+    function clearJDPastePreview() {
+      const preview = document.getElementById('jd-paste-preview');
+      const img = document.getElementById('jd-paste-img');
+      if (img.src && img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+      img.src = '';
+      preview.classList.add('hidden');
+    }
+
+    /** 执行 JD 图片解析 */
+    async function doJDParse(file) {
+      const pasteZone = document.getElementById('jd-paste-zone');
+      const originalHtml = pasteZone.innerHTML;
+      pasteZone.innerHTML = '<div class="text-sm text-primary font-medium">⏳ AI 解析中...</div>';
+
+      try {
+        const base64 = await fileToBase64(file);
+        const messages = [
+          {
+            role: 'system',
+            content: '你是一名专业的招聘信息提取助手。请从图片中提取职位描述（JD）的完整信息。\n\n提取规则：\n1. 保留所有关键信息：岗位名称、所属部门、薪资范围、工作地点、学历要求、工作年限\n2. 完整提取「岗位职责」和「任职要求」两部分内容\n3. 保留所有技术栈、技能关键词、业务领域关键词\n4. 去掉图片中的装饰性元素、Logo、页眉页脚、二维码等无关内容\n5. 如果内容有重复（如同一岗位的多语言版本），只保留中文版本\n6. 按「岗位概述 → 岗位职责 → 任职要求 → 加分项 → 其他信息」的结构输出\n7. 不要添加任何总结、评价或额外解释，只输出提取的原始信息\n8. 如果某些字段在图片中不存在，直接跳过，不要标注「未提供」'
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '请提取这张 JD 图片中的全部职位信息，按结构化文本输出：' },
+              { type: 'image_url', image_url: { url: base64 } }
+            ]
+          }
+        ];
+        const result = await AIProxy.vision(messages);
+        if (result && result.trim()) {
+          document.getElementById('jd-text').value = result.trim();
+          updateSummary();
+          showMsg('JD 图片解析成功，已填入上方', 'success');
+        } else {
+          showMsg('AI 未能解析出内容，请手动粘贴 JD', 'warning');
+        }
+      } catch (err) {
+        console.error('[配置页] JD 图片解析失败:', err);
+        showMsg('AI 解析失败：' + (err.message || '网络异常，请手动粘贴'), 'error');
+      } finally {
+        pasteZone.innerHTML = originalHtml;
+      }
     }
 
     function fileToBase64(file) {
