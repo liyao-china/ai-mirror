@@ -1827,6 +1827,7 @@ ${model}
     let browserInterimText = '';      // 浏览器实时识别中间文本
     let finalTranscript = '';         // 最终转录文本
     let isRecording = false;          // 是否正在录音
+    let silenceTimer = null;          // 静音检测定时器
     let subtitleVisible = true;       // 字幕是否可见
 
     /** 获取当前轮次对应的岗位名和级别名（辅助变量） */
@@ -1880,7 +1881,7 @@ ${model}
         mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : {});
 
         mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) {
+          if (e.data && e.data.size > 0) {
             const blob = e.data;
             const idx = currentSegmentIndex;
             currentSegmentIndex++;
@@ -1889,19 +1890,40 @@ ${model}
           }
         };
 
-        mediaRecorder.start();
+        // 传 12000ms timeslice：确保每 12 秒自动触发 ondataavailable，
+        // 同时解决部分浏览器（Safari）stop() 后不触发 ondataavailable 的兼容问题
+        mediaRecorder.start(12000);
 
-        // 12 秒分段录音（避免单段过长导致 ASR 超时）
+        // 12 秒分段（重启录音以重置 timeslice 计时）
         segmentTimer = setInterval(() => {
           if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop(); // ondataavailable 触发后立即重新 start
+            mediaRecorder.stop();
             setTimeout(() => {
               if (mediaRecorder && isRecording) {
-                try { mediaRecorder.start(); } catch(e) {}
+                try { mediaRecorder.start(12000); } catch(e) {}
               }
             }, 100);
           }
         }, 12000);
+
+        // 静音自动停止：连续 2.5 秒音量低于阈值则自动结束录音
+        let silenceCount = 0;
+        silenceTimer = setInterval(() => {
+          if (!isRecording || !analyserNode) { clearInterval(silenceTimer); return; }
+          const data = new Uint8Array(analyserNode.frequencyBinCount);
+          analyserNode.getByteFrequencyData(data);
+          const avg = data.reduce((a, b) => a + b, 0) / data.length;
+          if (avg < 8) {
+            silenceCount++;
+            if (silenceCount >= 5) { // 5 × 500ms = 2.5 秒
+              clearInterval(silenceCheck);
+              console.log(LOG, '检测到静音，自动停止录音');
+              stopRecording();
+            }
+          } else {
+            silenceCount = 0;
+          }
+        }, 500);
 
         // 启动浏览器实时识别（可选增强）
         initSpeechRecognition();
@@ -1917,6 +1939,9 @@ ${model}
     async function stopRecording() {
       if (!isRecording) return;
       isRecording = false;
+
+      // 清理静音检测定时器
+      if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
 
       // UI 恢复
       const micBtn = document.getElementById('mic-btn');
@@ -2392,7 +2417,10 @@ ${model}
       }
     }
 
-    /** 设置视频效果（纯 CSS filter 实现，零依赖） */
+    /** 设置视频效果（纯 CSS 实现，零依赖）
+     *  注意：真正的背景虚化需要 AI 人像分割（如 MediaPipe），纯 CSS 无法区分前景/背景，
+     *  因此"虚化"改为暗角聚焦效果（四周压暗突出人脸中心），其余效果用 CSS filter。
+     */
     function setVideoEffect(effect) {
       videoEffect = effect;
       if (!localVideo) return;
@@ -2400,12 +2428,29 @@ ${model}
       // 各效果的 CSS filter 参数
       const filters = {
         original: 'none',
-        blur: 'blur(3px) brightness(1.05)',        // 背景虚化感（简化为整体轻虚化）
-        gradient: 'saturate(1.6) hue-rotate(15deg) contrast(1.1)', // 色彩渐变增强
-        dark: 'brightness(0.65) contrast(1.15)',    // 深色模式
-        beauty: 'brightness(1.08) saturate(1.2) contrast(0.95) blur(0.4px)', // 磨皮美颜
+        blur: 'brightness(1.05) contrast(1.05)',           // 暗角聚焦（由 overlay CSS 实现）
+        gradient: 'saturate(1.5) hue-rotate(20deg) contrast(1.08)', // 色彩渐变增强
+        dark: 'brightness(0.6) contrast(1.15)',             // 深色模式
+        beauty: 'brightness(1.1) saturate(1.15) contrast(0.92) blur(0.3px)', // 磨皮美颜
       };
       localVideo.style.filter = filters[effect] || 'none';
+
+      // 虚化效果额外添加暗角叠加层（CSS radial-gradient 四周压暗）
+      const container = localVideo.parentElement;
+      let vignette = container.querySelector('.vignette-overlay');
+      if (effect === 'blur') {
+        if (!vignette) {
+          vignette = document.createElement('div');
+          vignette.className = 'vignette-overlay';
+          vignette.style.cssText = 'position:absolute;inset:0;pointer-events:none;border-radius:inherit;' +
+            'background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.45) 100%);z-index:1;';
+          container.style.position = 'relative';
+          container.appendChild(vignette);
+        }
+        vignette.style.display = '';
+      } else if (vignette) {
+        vignette.style.display = 'none';
+      }
 
       // 更新按钮高亮
       const btns = videoFloatEl.querySelectorAll('.bg-gray-900\\/80 button');
