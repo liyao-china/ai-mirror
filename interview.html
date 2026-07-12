@@ -701,6 +701,9 @@
 
       console.log(LOG, '初始化完成，配置:', cfg, '总题数:', TOTAL_QUESTIONS, '倒计时:', timerSeconds + 's');
 
+      // 根据回答方式预先初始化底部交互区，避免默认显示错误的输入方式
+      preInitInputArea();
+
       // 根据回答方式决定如何开始
       if (cfg.input === 'video') {
         // 视频模式：弹出授权弹窗，用户确认后再开始
@@ -713,6 +716,27 @@
         startInterviewAfterAuth();
       }
     })();
+
+    /** 页面加载时预先初始化底部交互区（防止视频/语音模式下先显示文字框） */
+    function preInitInputArea() {
+      const textArea = document.getElementById('text-area');
+      const micArea = document.getElementById('mic-area');
+      const subtitleToggle = document.getElementById('subtitle-toggle');
+
+      if (!textArea || !micArea) return;
+
+      if (cfg.input === 'voice' || cfg.input === 'video') {
+        // 语音/视频模式：隐藏文字输入，麦克风区域在授权完成前也先隐藏
+        textArea.classList.add('hidden');
+        micArea.classList.add('hidden');
+        subtitleToggle.classList.add('hidden');
+      } else {
+        // 文字模式
+        textArea.classList.remove('hidden');
+        micArea.classList.add('hidden');
+        subtitleToggle.classList.add('hidden');
+      }
+    }
 
     // =============================================
     // 多轮序列管理
@@ -1070,49 +1094,71 @@ ${model}
     function startInterview() {
       console.log(LOG, '面试开始');
 
-      // 显示面试中徽标
-      $badge().classList.remove('hidden');
-      $badge().classList.add('flex');
+      try {
+        // 显示面试中徽标
+        $badge().classList.remove('hidden');
+        $badge().classList.add('flex');
 
-      // 初始化 messages（system prompt）
-      messages = [{ role: 'system', content: buildSystemPrompt() }];
+        // 初始化 messages（system prompt）
+        messages = [{ role: 'system', content: buildSystemPrompt() }];
 
-      // 固定开场白（不调 AI）
-      const roundKey = series.rounds[series.index];
-      const jobName = jobNames[cfg.job] || cfg.job;
+        // 固定开场白（不调 AI）
+        const roundKey = series && series.rounds ? series.rounds[series.index] : (cfg.round || 'mentor');
+        const jobName = jobNames[cfg.job] || cfg.job;
 
-      const openingMap = {
-        mentor: `你好，我是${jobName}团队的面试官，平时在一线带项目，今天这场是业务一面。先请你用 1-2 分钟做个自我介绍，重点讲讲你实际做过的、和这个岗位最相关的事情。`,
-        leader: `你好，我是这个业务的负责人，今天由我来进行你的业务二面。时间有限，请你用 1-2 分钟做个自我介绍，重点说清楚：你做过什么，以及你认为自己最有价值的地方在哪。`,
-        director: `你好，我是${jobName}所在业务线的总监，今天这场是三面、也会带一些交叉视角。请你先用 1-2 分钟做个自我介绍，重点谈谈你做过最有影响力的一件事，以及你从中形成的判断。`,
-        hr: `你好，我是公司的HR，感谢你来参加今天的面试。先请你用 1-2 分钟简单介绍一下自己，也可以聊聊你为什么对${jobName}这个岗位感兴趣。`,
-      };
+        const openingMap = {
+          mentor: `你好，我是${jobName}团队的面试官，平时在一线带项目，今天这场是业务一面。先请你用 1-2 分钟做个自我介绍，重点讲讲你实际做过的、和这个岗位最相关的事情。`,
+          leader: `你好，我是这个业务的负责人，今天由我来进行你的业务二面。时间有限，请你用 1-2 分钟做个自我介绍，重点说清楚：你做过什么，以及你认为自己最有价值的地方在哪。`,
+          director: `你好，我是${jobName}所在业务线的总监，今天这场是三面、也会带一些交叉视角。请你先用 1-2 分钟做个自我介绍，重点谈谈你做过最有影响力的一件事，以及你从中形成的判断。`,
+          hr: `你好，我是公司的HR，感谢你来参加今天的面试。先请你用 1-2 分钟简单介绍一下自己，也可以聊聊你为什么对${jobName}这个岗位感兴趣。`,
+        };
 
-      const openingText = openingMap[roundKey] || openingMap.mentor;
+        const openingText = openingMap[roundKey] || openingMap.mentor;
 
-      // 设置状态
-      setAvatarState('speaking');
-      setState(STATE.SPEAKING, '面试官说话中', roundNames[roundKey] || '');
+        // 设置状态
+        setAvatarState('speaking');
+        setState(STATE.SPEAKING, '面试官说话中', roundNames[roundKey] || '');
 
-      // 根据 cfg.input 初始化交互区显示
-      initInputArea();
+        // 根据 cfg.input 初始化交互区显示
+        initInputArea();
 
-      // 打字机显示开场白
-      typewriterAbort = false;
-      $subtitleCard().classList.remove('hidden');
-      $subtitleText().textContent = '';
+        // 打字机显示开场白
+        typewriterAbort = false;
+        $subtitleCard().classList.remove('hidden');
+        $subtitleText().textContent = '';
 
-      typewriter(openingText, $subtitleText(), 26).then(() => {
-        // push 进 messages 作为 assistant 消息，末尾带 [STATUS:CONTINUE]
-        messages.push({ role: 'assistant', content: openingText + '\n[STATUS:CONTINUE]' });
+        // 语音/视频模式下后台播报开场白（TTS 与打字机并行，不阻塞状态切换）
+        if (cfg.input === 'voice' || cfg.input === 'video') {
+          speakQuestion(openingText).catch(e => console.warn(LOG, '开场白 TTS 失败:', e));
+        }
 
-        // 切换到等待回答状态
-        currentQuestionText = openingText;
-        setState(STATE.WAITING_ANSWER, '请回答', '等待你的回答');
-        setAvatarState('listening');
-        enableInput();
-        startTimer();
-      });
+        typewriter(openingText, $subtitleText(), 26).then(() => {
+          // push 进 messages 作为 assistant 消息，末尾带 [STATUS:CONTINUE]
+          messages.push({ role: 'assistant', content: openingText + '\n[STATUS:CONTINUE]' });
+
+          // 切换到等待回答状态
+          currentQuestionText = openingText;
+          setState(STATE.WAITING_ANSWER, '请回答', '等待你的回答');
+          setAvatarState('listening');
+          enableInput();
+          startTimer();
+        }).catch(err => {
+          console.error(LOG, '开场白出错:', err);
+          // 出错时直接显示完整文本并继续，不卡死
+          $subtitleText().textContent = openingText;
+          messages.push({ role: 'assistant', content: openingText + '\n[STATUS:CONTINUE]' });
+          currentQuestionText = openingText;
+          setState(STATE.WAITING_ANSWER, '请回答', '等待你的回答');
+          setAvatarState('listening');
+          enableInput();
+          startTimer();
+        });
+      } catch (err) {
+        console.error(LOG, '面试启动失败:', err);
+        setState(STATE.INIT, '启动失败', '请刷新页面重试');
+        setAvatarState('idle');
+        alert('面试启动时出错：' + (err.message || '未知错误') + '，请刷新页面重试');
+      }
     }
 
     // =============================================
@@ -1710,7 +1756,7 @@ ${model}
 
       if (!window.speechSynthesis) {
         // 浏览器不支持语音合成，直接结束播报状态
-        if (ttsSequenceId === seqId) {
+        if (ttsSequenceId === seqId && currentState === STATE.SPEAKING) {
           setAvatarState('idle');
           updateStatusCapsule('轮到你回答', '');
         }
@@ -1730,7 +1776,7 @@ ${model}
       if (zhVoice) utterance.voice = zhVoice;
 
       utterance.onend = () => {
-        if (ttsSequenceId === seqId) {
+        if (ttsSequenceId === seqId && currentState === STATE.SPEAKING) {
           setAvatarState('idle');
           updateStatusCapsule('轮到你回答', '');
         }
@@ -2157,7 +2203,7 @@ ${model}
     /** 更新顶部配置标签（岗位 · 职级 · 轮次 · 类型 · 回答方式） */
     function updateConfigLabel() {
       const parts = [];
-      const totalRounds = series ? series.rounds.length : 1;
+      const totalRounds = series && series.rounds ? series.rounds.length : 1;
       const currentRoundIdx = series ? series.index + 1 : 1;
 
       if (totalRounds > 1) {
@@ -2176,7 +2222,8 @@ ${model}
       const modeLabel = {text: '文字回答', voice: '语音回答', video: '视频回答'};
       parts.push(modeLabel[cfg.input] || cfg.input);
 
-      document.getElementById('config-tag').textContent = parts.join(' · ');
+      const el = document.getElementById('config-label');
+      if (el) el.textContent = parts.join(' · ');
     }
 
     // =============================================
@@ -2362,6 +2409,8 @@ ${model}
       overlay.classList.add('flex');
       // 视频窗临时放大方便预览
       if (videoFloatEl) resizeVideoFloat('large');
+      // 预览弹窗 z-50 会遮住浮窗(z-40)，提升浮窗到 z-[60] 使其可拖动和点击效果按钮
+      if (videoFloatEl) videoFloatEl.style.zIndex = '60';
     }
 
     /** 隐藏出镜预览卡片 */
@@ -2369,8 +2418,11 @@ ${model}
       const overlay = document.getElementById('video-preview-overlay');
       overlay.classList.add('hidden');
       overlay.classList.remove('flex');
-      // 恢复小窗
-      if (videoFloatEl) resizeVideoFloat('small');
+      // 恢复小窗 + 还原 z-index
+      if (videoFloatEl) {
+        resizeVideoFloat('small');
+        videoFloatEl.style.zIndex = '';
+      }
     }
 
     /** 预览卡片确认 → 开始面试 */
@@ -2416,19 +2468,15 @@ ${model}
 
     /** 通用的授权后开始面试 */
     function startInterviewAfterAuth() {
-      updateConfigLabel();
-      if (cfg.input === 'text') {
-        // 文字模式直接开始
-        document.getElementById('text-area').classList.remove('hidden');
-        document.getElementById('mic-area').classList.add('hidden');
-        document.getElementById('subtitle-toggle').classList.add('hidden');
-      } else {
-        // 语音/视频模式
-        document.getElementById('text-area').classList.add('hidden');
-        document.getElementById('mic-area').classList.remove('hidden');
-        document.getElementById('subtitle-toggle').classList.remove('hidden');
+      try {
+        updateConfigLabel();
+        initInputArea();
+        startInterview();
+      } catch (err) {
+        console.error(LOG, '授权后启动面试失败:', err);
+        setState(STATE.INIT, '启动失败', '请刷新页面重试');
+        alert('面试启动时出错：' + (err.message || '未知错误') + '，请刷新页面重试');
       }
-      startInterview();
     }
 
     /** 设备错误友好提示 */
