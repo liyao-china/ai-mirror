@@ -1,0 +1,1237 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>面试准备 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            brand: { from: '#6366F1', to: '#8B5CF6' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(99,102,241,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(139,92,246,0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > * { position: relative; z-index: 1; }
+
+    /* 品牌渐变按钮 */
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-brand:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.35);
+    }
+    .btn-brand:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .btn-brand:not(:disabled)::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 60%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      transition: left 0.5s ease;
+    }
+    .btn-brand:not(:disabled):hover::after { left: 120%; }
+
+    /* 输入框 */
+    .input-field {
+      transition: all 0.2s ease;
+    }
+    .input-field:focus {
+      border-color: #6366F1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+      outline: none;
+    }
+
+    /* 选项卡 */
+    .opt-card {
+      transition: all 0.2s ease;
+      cursor: pointer;
+      border: 2px solid #E5E7EB;
+      user-select: none;
+    }
+    .opt-card:hover { border-color: #C7D2FE; }
+    .opt-card.selected {
+      border-color: #6366F1;
+      background: #EEF2FF;
+    }
+    .opt-card .check-mark {
+      opacity: 0;
+      transform: scale(0.5);
+      transition: all 0.2s ease;
+    }
+    .opt-card.selected .check-mark {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    /* 步骤条 */
+    .step-dot {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      border: 2px solid #E5E7EB;
+      background: white;
+      color: #9CA3AF;
+      transition: all 0.3s ease;
+      flex-shrink: 0;
+    }
+    .step-dot.active {
+      border-color: #6366F1;
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      color: white;
+      box-shadow: 0 0 0 4px rgba(99,102,241,0.15);
+    }
+    .step-dot.done {
+      border-color: #10B981;
+      background: #10B981;
+      color: white;
+    }
+    .step-dot.fail {
+      border-color: #EF4444;
+      background: #EF4444;
+      color: white;
+    }
+    .step-line {
+      flex: 1; height: 2px;
+      background: #E5E7EB;
+      transition: background 0.3s ease;
+    }
+    .step-line.done { background: #10B981; }
+    .step-line.active { background: linear-gradient(90deg, #10B981, #6366F1); }
+
+    /* 底部栏 */
+    .bottom-bar {
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 1px solid #F3F4F6;
+    }
+
+    /* 虚线上传框 */
+    .drop-zone {
+      transition: all 0.2s ease;
+      border: 2px dashed #D1D5DB;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: #6366F1;
+      background-color: rgba(99,102,241,0.04);
+    }
+
+    /* 必填星号 */
+    .required-star { color: #F59E0B; }
+
+    /* 设备说明 */
+    .device-info {
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-size: 0.8125rem;
+      color: #6B7280;
+      line-height: 1.6;
+    }
+    .device-info.error {
+      background: #FEF2F2;
+      border-color: #FCA5A5;
+      color: #DC2626;
+    }
+    .device-info.success {
+      background: #F0FDF4;
+      border-color: #86EFAC;
+      color: #16A34A;
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] min-h-screen flex flex-col font-sans text-[#111827]">
+
+  <!-- 顶部导航 -->
+  <nav class="w-full bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2">
+        <span class="w-9 h-9 rounded-xl flex items-center justify-center text-xl" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)">🪞</span>
+        <span class="text-lg font-bold text-gray-900">AI面镜</span>
+      </a>
+      <div class="flex items-center gap-4">
+        <a href="history.html" class="text-sm text-gray-500 hover:text-primary transition-colors">历史记录</a>
+        <a href="membership.html" class="text-sm text-gray-500 hover:text-primary transition-colors">会员</a>
+        <span id="quota-display" class="text-sm text-gray-400"></span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="flex-1 max-w-7xl mx-auto w-full px-6 pt-8 pb-28">
+    <div class="flex gap-10">
+
+      <!-- ===== 左侧步骤条（桌面端） ===== -->
+      <aside class="hidden lg:block w-56 flex-shrink-0">
+        <div class="sticky top-24">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-6">面试准备步骤</h2>
+          <div class="flex flex-col gap-0" id="step-bar">
+            <!-- 步骤 1 -->
+            <div class="flex items-start gap-3">
+              <div class="flex flex-col items-center">
+                <div class="step-dot active" id="step-dot-1">1</div>
+                <div class="step-line mt-1" id="step-line-1" style="min-height:28px;"></div>
+              </div>
+              <div class="pt-1 pb-4">
+                <p class="text-sm font-semibold text-gray-900" id="step-label-1">背景信息</p>
+                <p class="text-xs text-gray-400 mt-0.5" id="step-status-1">待填写 JD</p>
+              </div>
+            </div>
+            <!-- 步骤 2 -->
+            <div class="flex items-start gap-3">
+              <div class="flex flex-col items-center">
+                <div class="step-dot" id="step-dot-2">2</div>
+                <div class="step-line mt-1" id="step-line-2" style="min-height:28px;"></div>
+              </div>
+              <div class="pt-1 pb-4">
+                <p class="text-sm font-semibold text-gray-900" id="step-label-2">面试配置</p>
+                <p class="text-xs text-gray-400 mt-0.5" id="step-status-2">选择岗位和偏好</p>
+              </div>
+            </div>
+            <!-- 步骤 3 -->
+            <div class="flex items-start gap-3">
+              <div class="flex flex-col items-center">
+                <div class="step-dot" id="step-dot-3">3</div>
+                <div class="step-line mt-1" id="step-line-3" style="min-height:28px;"></div>
+              </div>
+              <div class="pt-1 pb-4">
+                <p class="text-sm font-semibold text-gray-900" id="step-label-3">设备检测</p>
+                <p class="text-xs text-gray-400 mt-0.5" id="step-status-3">开始前自动检测</p>
+              </div>
+            </div>
+            <!-- 步骤 4 -->
+            <div class="flex items-start gap-3">
+              <div class="flex flex-col items-center">
+                <div class="step-dot" id="step-dot-4">4</div>
+              </div>
+              <div class="pt-1">
+                <p class="text-sm font-semibold text-gray-900" id="step-label-4">开始面试</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ===== 右侧配置主体 ===== -->
+      <div class="flex-1 min-w-0">
+
+        <!-- 页面标题 -->
+        <div class="mb-8">
+          <h1 class="text-2xl font-bold text-gray-900 mb-2">开始一场新的模拟面试</h1>
+          <p class="text-gray-500 text-sm">根据你的目标定制专属面试，所有选项都会影响题目和评分权重</p>
+        </div>
+
+        <!-- ========== 模块 1 · 背景信息 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-5 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">📋</span>
+            背景信息
+          </h2>
+
+          <!-- 简历来源下拉 -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">简历来源</label>
+            <select id="resume-source" class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white">
+              <option value="none">不使用附件，仅填写下方背景</option>
+            </select>
+          </div>
+
+          <!-- 临时上传 -->
+          <div id="drop-zone" class="drop-zone rounded-xl p-6 text-center cursor-pointer mb-5" onclick="document.getElementById('file-upload').click()">
+            <svg class="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m0-16l-4 4m4-4l4 4"/></svg>
+            <p class="text-sm text-gray-600">+ 临时上传新简历（PDF / TXT）</p>
+            <p class="text-xs text-gray-400 mt-1">上传后自动加入上方下拉选项</p>
+            <input type="file" id="file-upload" accept=".pdf,.txt" class="hidden">
+          </div>
+
+          <!-- 补充背景 -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">工作年限</label>
+              <input type="text" id="work-years" placeholder="如：3-5 年" class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">核心技能</label>
+              <input type="text" id="core-skills" placeholder="如：Python, PyTorch, 系统设计" class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm">
+            </div>
+          </div>
+          <div class="mb-5">
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">补充背景</label>
+            <textarea id="extra-bg" rows="3" placeholder="免登录用户可在这里粘贴简历内容..." class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-y"></textarea>
+          </div>
+
+          <!-- 本次岗位 JD（必填） -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">
+              本次岗位 JD <span class="required-star">*</span>
+              <span class="text-[11px] text-orange-400 font-normal ml-1">每场需重新提供</span>
+            </label>
+            <textarea id="jd-text" rows="5" placeholder="请粘贴目标岗位的职位描述..." class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-y mb-2"></textarea>
+            <button type="button" id="upload-jd-img" class="text-sm text-primary hover:text-indigo-400 flex items-center gap-1 transition-colors">
+              🖼️ 上传 JD 图片并由 AI 解析
+            </button>
+            <input type="file" id="jd-image-input" accept="image/*" class="hidden">
+          </div>
+        </section>
+
+        <!-- ========== 模块 2 · 目标岗位 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">🎯</span>
+            目标岗位
+            <span class="required-star">*</span>
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">单选，选择你最接近的目标岗位</p>
+
+          <div id="job-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+        </section>
+
+        <!-- ========== 模块 3 · 职级 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">📊</span>
+            职级
+            <span class="required-star">*</span>
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">单选，选择你的目标职级</p>
+
+          <div id="level-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+        </section>
+
+        <!-- ========== 模块 4 · 面试轮次 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">🔄</span>
+            面试轮次
+            <span class="required-star">*</span>
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">可多选。将按 一面 → 二面 → 三面 → HR面 的顺序依次进行：每完成一轮先出本轮报告，再询问你是否进入下一轮（下一轮会继承上一轮暴露的强弱项继续深入）。只选一项就是单轮专项练习。</p>
+
+          <div id="rounds-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+        </section>
+
+        <!-- ========== 模块 5 · 面试类型 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">📝</span>
+            面试类型
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">可多选</p>
+
+          <div id="type-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+        </section>
+
+        <!-- ========== 模块 6 · 时长 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">⏱️</span>
+            面试时长
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">单选</p>
+
+          <div id="duration-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+        </section>
+
+        <!-- ========== 模块 7 · 回答方式 ========== -->
+        <section class="bg-white rounded-2xl p-6 md:p-8 mb-6" style="box-shadow:0 4px 20px rgba(99,102,241,0.06);">
+          <h2 class="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-sm">🎤</span>
+            回答方式
+          </h2>
+          <p class="text-xs text-gray-400 mb-5">单选</p>
+
+          <div id="input-grid" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+          <div id="device-info" class="device-info mt-4">
+            选择回答方式后将显示设备说明。
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== 底部操作栏（sticky bottom） ===== -->
+  <div class="bottom-bar fixed bottom-0 left-0 right-0 z-40">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <p id="bottom-summary" class="text-sm text-gray-500 flex-1 min-w-0 mr-4 truncate">请先填写或上传本次岗位 JD（必填）</p>
+      <button type="button" id="btn-start" class="btn-brand relative overflow-hidden px-8 py-3 rounded-xl text-white font-semibold text-sm flex-shrink-0" disabled onclick="handleStart()">
+        开始面试 →
+      </button>
+    </div>
+  </div>
+
+  <!-- 外部资源 -->
+  <script src="supabase-config.js"></script>
+  <script src="ai-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    // PDF.js worker 配置
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+    // ===========================
+    // 数据定义
+    // ===========================
+
+    // 目标岗位：分组 + 选项
+    const jobGroups = [
+      { label: '💻 技术类', items: [
+        { id: 'backend', emoji: '⚙️', name: '后端开发', desc: '服务端/高并发' },
+        { id: 'frontend', emoji: '🖥️', name: '前端开发', desc: 'Web/工程化' },
+        { id: 'mobile', emoji: '📱', name: '移动端', desc: 'iOS/Android' },
+        { id: 'algo', emoji: '🤖', name: '算法/AI工程师', desc: 'NLP/CV/大模型' },
+        { id: 'agent', emoji: '🧠', name: 'Agent开发工程师', desc: '智能体/多框架' },
+        { id: 'data-eng', emoji: '🏗️', name: '数据工程师', desc: '数仓/ETL/大数据' },
+        { id: 'architect', emoji: '🏠', name: '架构师', desc: '系统设计/选型' },
+        { id: 'sre', emoji: '🛡️', name: 'SRE/运维工程师', desc: '稳定性/可观测' },
+        { id: 'security', emoji: '🔐', name: '安全工程师', desc: '攻防/合规' },
+      ]},
+      { label: '📦 产品类', items: [
+        { id: 'pm', emoji: '📋', name: '产品经理', desc: 'C端/B端/增长' },
+        { id: 'ai-pm', emoji: '🤖', name: 'AI产品经理', desc: '大模型/智能化' },
+        { id: 'game-design', emoji: '🎮', name: '游戏策划', desc: '数值/系统/玩法' },
+      ]},
+      { label: '📈 商业类', items: [
+        { id: 'operations', emoji: '📈', name: '运营', desc: '用户/内容/活动' },
+        { id: 'ai-ops', emoji: '🤖', name: 'AI运营', desc: 'AIGC/数据增长' },
+        { id: 'marketing', emoji: '📢', name: '市场营销', desc: '品牌/投放/增长' },
+        { id: 'biz-analysis', emoji: '📊', name: '商业分析', desc: '战略/商业化' },
+      ]},
+      { label: '🧩 职能类', items: [
+        { id: 'data-analyst', emoji: '📊', name: '数据分析师', desc: 'SQL/AB/指标' },
+        { id: 'hr-role', emoji: '👥', name: '人力资源(HR)', desc: '招聘/HRBP' },
+        { id: 'legal', emoji: '⚖️', name: '法务', desc: '合规/合同' },
+        { id: 'finance', emoji: '💰', name: '财务', desc: 'FP&A/风控' },
+      ]},
+    ];
+
+    // 岗位 ID → 中文名映射
+    const jobNames = {
+      backend: '后端开发', frontend: '前端开发', mobile: '移动端开发',
+      algo: '算法/AI工程师', agent: 'Agent开发工程师', 'data-eng': '数据工程师',
+      architect: '架构师', sre: 'SRE/运维工程师', security: '安全工程师',
+      pm: '产品经理', 'ai-pm': 'AI产品经理', 'game-design': '游戏策划',
+      operations: '运营', 'ai-ops': 'AI运营', marketing: '市场营销',
+      'biz-analysis': '商业分析', 'data-analyst': '数据分析师',
+      'hr-role': '人力资源(HR)', legal: '法务', finance: '财务',
+    };
+
+    // 职级选项
+    const levels = [
+      { id: 'intern', name: '实习', desc: '在校实习' },
+      { id: 'campus', name: '校招', desc: '应届毕业' },
+      { id: 'junior', name: '初级', desc: '1-3年' },
+      { id: 'mid', name: '中级', desc: '3-5年' },
+      { id: 'senior', name: '高级', desc: '5-8年' },
+      { id: 'expert', name: '专家', desc: '8年以上' },
+    ];
+
+    // 面试轮次选项
+    const roundOptions = [
+      { id: 'mentor', emoji: '🧑‍💻', name: '业务一面·Mentor', desc: '抠项目细节、执行落地、上手速度' },
+      { id: 'leader', emoji: '🧭', name: '业务二面·Leader', desc: '思考深度、数据驱动、战略眼光' },
+      { id: 'director', emoji: '🏛️', name: '三面·总监/交叉面', desc: '跨团队协作、行业判断、价值观格局' },
+      { id: 'hr', emoji: '🤝', name: 'HR面', desc: '动机稳定性、软素质、文化匹配' },
+    ];
+
+    // 面试类型选项
+    const typeOptions = [
+      { id: 'behavior', name: '行为面试', desc: 'STAR/软技能' },
+      { id: 'tech', name: '技术面试', desc: '原理/系统设计' },
+      { id: 'project', name: '项目深度面', desc: '围绕简历追问' },
+      { id: 'pressure', name: '压力面试', desc: '限时/质疑' },
+      { id: 'case', name: '案例设计面', desc: '开放性问题' },
+    ];
+
+    // 时长选项
+    const durationOptions = [
+      { id: 'quick', name: '快速版', desc: '15分钟·约5题' },
+      { id: 'standard', name: '标准版', desc: '30分钟·约8题' },
+      { id: 'deep', name: '深度版', desc: '60分钟·约12题' },
+    ];
+
+    // 回答方式选项
+    const inputOptions = [
+      { id: 'voice', emoji: '🎙️', name: '语音回答', desc: '更贴近真实面试' },
+      { id: 'video', emoji: '📹', name: '视频回答', desc: '', badge: '推荐' },
+      { id: 'text', emoji: '⌨️', name: '文字回答', desc: '适合安静环境' },
+    ];
+
+    // 设备说明文案
+    const deviceDescriptions = {
+      voice: '语音模式需要麦克风权限。面试过程中你可以随时说话回答问题，AI 会实时语音识别并评估你的表达能力。',
+      video: '视频模式需要摄像头和麦克风权限。AI 面试官将同时观察你的面部表情和肢体语言，更接近真实面试场景。',
+      text: '文字模式无需任何设备权限。在安静环境下通过键盘输入回答，适合不方便使用语音的场景。',
+    };
+
+    // 轮次固定顺序
+    const roundOrder = ['mentor', 'leader', 'director', 'hr'];
+
+    // ===========================
+    // 状态
+    // ===========================
+    let selectedJob = null;
+    let selectedLevel = null;
+    let selectedRounds = new Set(['mentor']); // 默认选中 mentor
+    let selectedTypes = new Set();
+    let selectedDuration = 'standard';
+    let selectedInput = 'video';
+    let deviceCheckResult = null; // null | 'pass' | 'fail'
+
+    // ===========================
+    // 工具函数
+    // ===========================
+
+    /** 检查用户是否已登录 */
+    function isLoggedIn() {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && /^sb-.*-auth-token$/.test(key)) return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    /** 安全读取 JSON */
+    function safeGetJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+    }
+
+    // ===========================
+    // 渲染函数
+    // ===========================
+
+    /** 渲染目标岗位卡片 */
+    function renderJobs() {
+      const container = document.getElementById('job-grid');
+      container.innerHTML = '';
+      jobGroups.forEach(group => {
+        const heading = document.createElement('p');
+        heading.className = 'text-xs font-semibold text-gray-400 col-span-full mt-2 mb-1';
+        heading.textContent = group.label;
+        container.appendChild(heading);
+
+        group.items.forEach(item => {
+          const card = document.createElement('div');
+          card.className = 'opt-card rounded-xl p-3 relative';
+          card.setAttribute('role', 'button');
+          card.setAttribute('tabindex', '0');
+          card.setAttribute('aria-pressed', 'false');
+          card.dataset.id = item.id;
+          card.innerHTML = `
+            <div class="check-mark absolute top-2 right-2 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-xs">✓</div>
+            <div class="flex items-center gap-2">
+              <span class="text-lg">${item.emoji}</span>
+              <div>
+                <p class="text-sm font-medium text-gray-900">${item.name}</p>
+                <p class="text-[11px] text-gray-400">${item.desc}</p>
+              </div>
+            </div>
+          `;
+          card.onclick = () => selectJob(item.id);
+          card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectJob(item.id); } };
+          container.appendChild(card);
+        });
+      });
+    }
+
+    /** 渲染单选卡片组（职级、时长、回答方式） */
+    function renderSingleSelect(containerId, options, stateGetter, selectFn) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      options.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'opt-card rounded-xl p-3 relative' + (stateGetter() === item.id ? ' selected' : '');
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-pressed', stateGetter() === item.id ? 'true' : 'false');
+        card.dataset.id = item.id;
+        const badgeHtml = item.badge ? `<span class="absolute top-2 right-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-md">${item.badge}</span>` : '';
+        card.innerHTML = `
+          <div class="check-mark absolute top-2 ${item.badge ? 'right-14' : 'right-2'} w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-xs">✓</div>
+          ${badgeHtml}
+          <div class="flex items-center gap-2">
+            ${item.emoji ? `<span class="text-lg">${item.emoji}</span>` : ''}
+            <div>
+              <p class="text-sm font-medium text-gray-900">${item.name}</p>
+              <p class="text-[11px] text-gray-400">${item.desc}</p>
+            </div>
+          </div>
+        `;
+        card.onclick = () => selectFn(item.id);
+        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectFn(item.id); } };
+        container.appendChild(card);
+      });
+    }
+
+    /** 渲染多选卡片组（轮次、类型） */
+    function renderMultiSelect(containerId, options, selectedSet, toggleFn) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      options.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'opt-card rounded-xl p-3 relative' + (selectedSet.has(item.id) ? ' selected' : '');
+        card.setAttribute('role', 'button');
+        card.setAttribute('tabindex', '0');
+        card.setAttribute('aria-pressed', selectedSet.has(item.id) ? 'true' : 'false');
+        card.dataset.id = item.id;
+        card.innerHTML = `
+          <div class="check-mark absolute top-2 right-2 w-5 h-5 rounded-full bg-primary text-white flex items-center justify-center text-xs">✓</div>
+          <div class="flex items-center gap-2">
+            ${item.emoji ? `<span class="text-lg">${item.emoji}</span>` : ''}
+            <div>
+              <p class="text-sm font-medium text-gray-900">${item.name}</p>
+              <p class="text-[11px] text-gray-400">${item.desc}</p>
+            </div>
+          </div>
+        `;
+        card.onclick = () => toggleFn(item.id);
+        card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleFn(item.id); } };
+        container.appendChild(card);
+      });
+    }
+
+    // ===========================
+    // 选择逻辑
+    // ===========================
+
+    function selectJob(id) {
+      selectedJob = selectedJob === id ? null : id;
+      // 重新渲染整个岗位网格以更新选中态
+      const container = document.getElementById('job-grid');
+      container.querySelectorAll('.opt-card').forEach(card => {
+        const isSelected = card.dataset.id === selectedJob;
+        card.classList.toggle('selected', isSelected);
+        card.setAttribute('aria-pressed', isSelected ? 'true' : 'false');
+      });
+      updateSummary();
+    }
+
+    function selectLevel(id) {
+      selectedLevel = id;
+      renderSingleSelect('level-grid', levels, () => selectedLevel, selectLevel);
+      updateSummary();
+    }
+
+    function toggleRound(id) {
+      if (selectedRounds.has(id)) selectedRounds.delete(id);
+      else selectedRounds.add(id);
+      renderMultiSelect('rounds-grid', roundOptions, selectedRounds, toggleRound);
+      updateSummary();
+    }
+
+    function toggleType(id) {
+      if (selectedTypes.has(id)) selectedTypes.delete(id);
+      else selectedTypes.add(id);
+      renderMultiSelect('type-grid', typeOptions, selectedTypes, toggleType);
+      updateSummary();
+    }
+
+    function selectDuration(id) {
+      selectedDuration = id;
+      renderSingleSelect('duration-grid', durationOptions, () => selectedDuration, selectDuration);
+      updateSummary();
+    }
+
+    function selectInput(id) {
+      selectedInput = id;
+      deviceCheckResult = null; // 切换回答方式时重置设备检测结果
+      renderSingleSelect('input-grid', inputOptions, () => selectedInput, selectInput);
+      updateDeviceInfo();
+      updateSummary();
+    }
+
+    // ===========================
+    // 底部摘要
+    // ===========================
+
+    function updateSummary() {
+      const jd = document.getElementById('jd-text').value.trim();
+      const el = document.getElementById('bottom-summary');
+      const btn = document.getElementById('btn-start');
+      const parts = [];
+
+      // 必填项检查
+      if (!jd) {
+        el.textContent = '请先填写或上传本次岗位 JD（必填）';
+        btn.disabled = true;
+        updateStepBar();
+        return;
+      }
+      if (!selectedJob || !selectedLevel) {
+        el.textContent = '请再选择岗位和职级（必选）';
+        btn.disabled = true;
+        updateStepBar();
+        return;
+      }
+      if (selectedRounds.size === 0) {
+        el.textContent = '请至少选择一个面试轮次';
+        btn.disabled = true;
+        updateStepBar();
+        return;
+      }
+
+      // 岗位 + 职级
+      parts.push(jobNames[selectedJob] || selectedJob);
+      parts.push(levels.find(l => l.id === selectedLevel)?.name || selectedLevel);
+
+      // 轮次描述
+      const sortedRounds = roundOrder.filter(r => selectedRounds.has(r));
+      const roundNames = sortedRounds.map(r => roundOptions.find(o => o.id === r)?.name.replace(/业务一面·/, '').replace(/业务二面·/, '').replace(/三面·/, '') || r);
+      if (sortedRounds.length === 1) {
+        parts.push(roundNames[0] + '面');
+      } else {
+        parts.push(roundNames.join(' → ') + '（共' + sortedRounds.length + '轮）');
+      }
+
+      // 时长
+      const dur = durationOptions.find(d => d.id === selectedDuration);
+      if (dur) parts.push(dur.desc.split('·')[0].trim());
+
+      // 回答方式
+      const inp = inputOptions.find(i => i.id === selectedInput);
+      if (inp) parts.push(inp.name);
+
+      el.textContent = parts.join(' · ');
+      btn.disabled = false;
+      updateStepBar();
+    }
+
+    // ===========================
+    // 步骤条更新
+    // ===========================
+
+    function updateStepBar() {
+      const jd = document.getElementById('jd-text').value.trim();
+
+      // 步骤 1：背景信息
+      const dot1 = document.getElementById('step-dot-1');
+      const status1 = document.getElementById('step-status-1');
+      const line1 = document.getElementById('step-line-1');
+      if (jd && selectedJob) {
+        dot1.className = 'step-dot done';
+        dot1.innerHTML = '✓';
+        status1.textContent = '已确认';
+        line1.className = 'step-line done mt-1';
+      } else {
+        dot1.className = 'step-dot active';
+        dot1.innerHTML = '1';
+        status1.textContent = jd ? '请选择岗位' : '待填写 JD';
+        line1.className = 'step-line mt-1';
+      }
+
+      // 步骤 2：面试配置
+      const dot2 = document.getElementById('step-dot-2');
+      const line2 = document.getElementById('step-line-2');
+      if (selectedJob && selectedLevel && selectedRounds.size > 0) {
+        dot2.className = 'step-dot done';
+        dot2.innerHTML = '✓';
+        line2.className = 'step-line done mt-1';
+      } else {
+        dot2.className = 'step-dot active';
+        dot2.innerHTML = '2';
+        line2.className = 'step-line mt-1';
+      }
+
+      // 步骤 3：设备检测
+      const dot3 = document.getElementById('step-dot-3');
+      const status3 = document.getElementById('step-status-3');
+      const line3 = document.getElementById('step-line-3');
+      if (selectedInput === 'text') {
+        dot3.className = 'step-dot done';
+        dot3.innerHTML = '✓';
+        status3.textContent = '无需检测';
+        line3.className = 'step-line done mt-1';
+      } else if (deviceCheckResult === 'pass') {
+        dot3.className = 'step-dot done';
+        dot3.innerHTML = '✓';
+        status3.textContent = '检测通过';
+        line3.className = 'step-line done mt-1';
+      } else if (deviceCheckResult === 'fail') {
+        dot3.className = 'step-dot fail';
+        dot3.innerHTML = '!';
+        status3.textContent = '检测未通过';
+        line3.className = 'step-line mt-1';
+      } else {
+        dot3.className = 'step-dot';
+        dot3.innerHTML = '3';
+        status3.textContent = '开始前自动检测';
+        line3.className = 'step-line mt-1';
+      }
+
+      // 步骤 4
+      const dot4 = document.getElementById('step-dot-4');
+      const canStart = jd && selectedJob && selectedLevel && selectedRounds.size > 0;
+      if (canStart && (selectedInput === 'text' || deviceCheckResult === 'pass')) {
+        dot4.className = 'step-dot active';
+      } else {
+        dot4.className = 'step-dot';
+      }
+    }
+
+    // ===========================
+    // 设备说明文案
+    // ===========================
+
+    function updateDeviceInfo() {
+      const el = document.getElementById('device-info');
+      el.className = 'device-info mt-4';
+      el.textContent = deviceDescriptions[selectedInput] || '';
+    }
+
+    // ===========================
+    // 简历来源
+    // ===========================
+
+    function initResumeSource() {
+      const sel = document.getElementById('resume-source');
+      let activeResumeId = localStorage.getItem('activeResumeId') || '';
+
+      // onlineResume 选项
+      const onlineResume = safeGetJSON('onlineResume');
+      if (onlineResume) {
+        const opt = document.createElement('option');
+        opt.value = 'online';
+        opt.textContent = '在线简历（基础信息）';
+        sel.appendChild(opt);
+      }
+
+      // resumeVersions 选项
+      const versions = safeGetJSON('resumeVersions') || [];
+      versions.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = v.name || v.id;
+        sel.appendChild(opt);
+      });
+
+      // 当前浏览器已有简历
+      const resumeInfo = localStorage.getItem('resumeInfo');
+      if (resumeInfo) {
+        const opt = document.createElement('option');
+        opt.value = 'current';
+        opt.textContent = '当前浏览器已有简历';
+        sel.appendChild(opt);
+      }
+
+      // 默认选中
+      if (activeResumeId) {
+        // 查找是否有匹配的选项
+        const matchOption = Array.from(sel.options).find(o => o.value === activeResumeId);
+        if (matchOption) sel.value = activeResumeId;
+      }
+    }
+
+    // ===========================
+    // 简历上传
+    // ===========================
+
+    function initFileUpload() {
+      const dropZone = document.getElementById('drop-zone');
+      const fileInput = document.getElementById('file-upload');
+
+      dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+      dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+      dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        const file = e.dataTransfer.files[0];
+        if (file) handleResumeFile(file);
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) handleResumeFile(file);
+        fileInput.value = '';
+      });
+    }
+
+    async function handleResumeFile(file) {
+      try {
+        let text = '';
+        if (file.type === 'application/pdf') {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const tc = await page.getTextContent();
+            text += tc.items.map(item => item.str).join(' ') + '\n';
+          }
+          text = text.trim();
+          if (!text) {
+            alert('PDF 中未提取到文字，请手动粘贴简历内容到下方补充背景中');
+            return;
+          }
+        } else {
+          text = await file.text();
+        }
+
+        const sel = document.getElementById('resume-source');
+        const versionId = 'temp_' + Date.now();
+        const fileName = file.name.replace(/\.[^.]+$/, '') || '临时简历';
+
+        if (isLoggedIn()) {
+          // 已登录：存入 resumeVersions（上限 5）
+          let versions = safeGetJSON('resumeVersions') || [];
+          if (versions.length >= 5) {
+            alert('简历附件已满 5 版，请前往简历管理删除旧版本后再上传');
+            return;
+          }
+          versions.push({ id: versionId, name: fileName + '（临时上传）', text });
+          localStorage.setItem('resumeVersions', JSON.stringify(versions));
+        }
+
+        // 添加到下拉选项
+        const opt = document.createElement('option');
+        opt.value = versionId;
+        opt.textContent = fileName + '（临时上传）';
+        sel.appendChild(opt);
+        sel.value = versionId;
+
+        // 同时存入临时变量供后续使用
+        window._tempResumeText = text;
+
+        // 将文本填入补充背景 textarea
+        document.getElementById('extra-bg').value = text;
+
+      } catch (err) {
+        console.error('[配置页] 简历上传失败:', err);
+        alert('文件读取失败，请重试');
+      }
+    }
+
+    // ===========================
+    // JD 图片上传 + AI 解析
+    // ===========================
+
+    function initJDImageUpload() {
+      const btn = document.getElementById('upload-jd-img');
+      const input = document.getElementById('jd-image-input');
+
+      btn.onclick = () => input.click();
+      input.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        input.value = '';
+
+        btn.textContent = '⏳ AI 解析中...';
+        btn.disabled = true;
+
+        try {
+          const base64 = await fileToBase64(file);
+          const messages = [
+            { role: 'system', content: '你是一个职位描述解析助手。请从图片中提取完整的职位描述信息，包括岗位名称、要求、职责等，以纯文本形式输出。' },
+            { role: 'user', content: [
+              { type: 'text', text: '请提取图片中的职位描述（JD）信息：' },
+              { type: 'image_url', image_url: { url: base64 } }
+            ]}
+          ];
+          const result = await AIProxy.vision(messages);
+          if (result && result.trim()) {
+            document.getElementById('jd-text').value = result.trim();
+            updateSummary();
+          } else {
+            alert('AI 未能解析出内容，请手动粘贴 JD');
+          }
+        } catch (err) {
+          console.error('[配置页] JD 图片解析失败:', err);
+          alert('AI 解析失败，请手动粘贴 JD');
+        } finally {
+          btn.innerHTML = '🖼️ 上传 JD 图片并由 AI 解析';
+          btn.disabled = false;
+        }
+      });
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ===========================
+    // 一次性 pendingJD / pendingTargetJob 处理
+    // ===========================
+
+    function consumePendingData() {
+      // pendingJD：一次性带入
+      const pendingJD = localStorage.getItem('pendingJD');
+      if (pendingJD) {
+        localStorage.removeItem('pendingJD');
+        document.getElementById('jd-text').value = pendingJD;
+        showMsg('已自动带入你在上一步填写的岗位 JD，请核对', 'success');
+      }
+
+      // pendingTargetJob：一次性带入
+      const pendingTargetJob = localStorage.getItem('pendingTargetJob');
+      if (pendingTargetJob) {
+        localStorage.removeItem('pendingTargetJob');
+        // 尝试匹配岗位 ID
+        const matchId = Object.keys(jobNames).find(k =>
+          jobNames[k].includes(pendingTargetJob) || k.includes(pendingTargetJob.toLowerCase().replace(/\s/g, ''))
+        );
+        if (matchId) selectJob(matchId);
+      }
+    }
+
+    /** 显示消息提示（复用 card 内消息区） */
+    function showMsg(text, type) {
+      // 在 JD 区块顶部显示一次性提示
+      const jdSection = document.getElementById('jd-text').closest('section');
+      let tip = jdSection.querySelector('.pending-tip');
+      if (!tip) {
+        tip = document.createElement('div');
+        tip.className = 'pending-tip text-sm py-2 px-3 rounded-xl mb-4 font-medium';
+        jdSection.querySelector('h2').after(tip);
+      }
+      tip.textContent = text;
+      tip.classList.remove('bg-green-50', 'text-green-600', 'bg-red-50', 'text-red-600', 'bg-yellow-50', 'text-yellow-600');
+      if (type === 'success') tip.classList.add('bg-green-50', 'text-green-600');
+      else if (type === 'warning') tip.classList.add('bg-yellow-50', 'text-yellow-600');
+      else tip.classList.add('bg-red-50', 'text-red-600');
+
+      // 5 秒后自动移除
+      setTimeout(() => { if (tip.parentNode) tip.remove(); }, 5000);
+    }
+
+    // ===========================
+    // 额度显示
+    // ===========================
+
+    async function loadQuota() {
+      try {
+        const quota = await AIProxy.quota();
+        const remaining = Math.max(0, Math.floor((quota.limit - quota.used) / 35));
+        const el = document.getElementById('quota-display');
+        if (!isLoggedIn()) {
+          el.textContent = '今日剩余约 ' + remaining + ' 场（登录可提额）';
+        } else {
+          el.textContent = '今日剩余约 ' + remaining + ' 场';
+        }
+      } catch (err) {
+        console.warn('[配置页] 获取额度失败:', err);
+      }
+    }
+
+    // ===========================
+    // 开始面试逻辑
+    // ===========================
+
+    async function handleStart() {
+      const btn = document.getElementById('btn-start');
+      btn.disabled = true;
+      btn.textContent = '准备中...';
+
+      try {
+        // === 1. 保存背景信息 ===
+        const resumeSource = document.getElementById('resume-source').value;
+        const versions = safeGetJSON('resumeVersions') || [];
+        let resumeContent = '';
+
+        if (resumeSource === 'none') {
+          resumeContent = '';
+        } else if (resumeSource === 'online') {
+          resumeContent = localStorage.getItem('onlineResume') || '';
+        } else if (resumeSource === 'current') {
+          resumeContent = localStorage.getItem('resumeInfo') || '';
+        } else {
+          // 从 resumeVersions 或临时变量中获取
+          const version = versions.find(v => v.id === resumeSource);
+          if (version && version.text) {
+            resumeContent = version.text;
+          } else if (window._tempResumeText) {
+            resumeContent = window._tempResumeText;
+          }
+        }
+
+        // 合并补充背景
+        const workYears = document.getElementById('work-years').value.trim();
+        const coreSkills = document.getElementById('core-skills').value.trim();
+        const extraBg = document.getElementById('extra-bg').value.trim();
+
+        let finalResume = resumeContent;
+        const extras = [];
+        if (workYears) extras.push('工作年限：' + workYears);
+        if (coreSkills) extras.push('核心技能：' + coreSkills);
+        if (extraBg) extras.push('补充：' + extraBg);
+        if (extras.length > 0) {
+          finalResume = finalResume ? finalResume + '\n\n' + extras.join('\n') : extras.join('\n');
+        }
+
+        // 保存到 localStorage
+        if (finalResume) {
+          localStorage.setItem('resumeInfo', finalResume);
+        } else {
+          localStorage.removeItem('resumeInfo');
+        }
+
+        const jdText = document.getElementById('jd-text').value.trim();
+        if (jdText) {
+          localStorage.setItem('jdInfo', jdText);
+        }
+
+        // === 2. 设备检测（语音/视频模式） ===
+        if (selectedInput !== 'text') {
+          const needVideo = selectedInput === 'video';
+          const deviceEl = document.getElementById('device-info');
+          deviceEl.className = 'device-info mt-4';
+          deviceEl.textContent = '正在检测设备...';
+
+          try {
+            const constraints = needVideo ? { audio: true, video: true } : { audio: true };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            // 拿到流立刻释放，只做检测
+            stream.getTracks().forEach(t => t.stop());
+            deviceCheckResult = 'pass';
+            deviceEl.className = 'device-info success mt-4';
+            deviceEl.textContent = '设备检测通过！' + (needVideo ? '摄像头和麦克风' : '麦克风') + '均可正常使用。';
+            console.log('[配置页] 设备检测通过');
+          } catch (err) {
+            deviceCheckResult = 'fail';
+            console.error('[配置页] 设备检测失败:', err);
+            let errMsg = '';
+            if (err.name === 'NotAllowedError') {
+              errMsg = '权限被拒绝，请检查地址栏左侧站点设置（摄像头/麦克风权限）和系统隐私设置';
+            } else if (err.name === 'NotFoundError') {
+              errMsg = '没有检测到可用的' + (needVideo ? '摄像头或麦克风' : '麦克风') + '设备';
+            } else if (err.name === 'NotReadableError') {
+              errMsg = '设备被其他应用占用，请关闭其他使用' + (needVideo ? '摄像头/麦克风' : '麦克风') + '的应用后重试';
+            } else if (err.name === 'SecurityError') {
+              errMsg = '请使用 HTTPS 页面访问（localhost 除外）';
+            } else {
+              errMsg = '设备检测失败：' + (err.message || '未知错误');
+            }
+            deviceEl.className = 'device-info error mt-4';
+            deviceEl.textContent = '⚠️ ' + errMsg;
+
+            // 更新步骤条
+            updateStepBar();
+            btn.disabled = false;
+            btn.textContent = '开始面试 →';
+            return; // 不继续
+          }
+        }
+
+        // === 3. 构建 interviewConfig 并跳转 ===
+        localStorage.removeItem('interviewSeries');
+
+        // 轮次按固定顺序排序
+        const sortedRounds = roundOrder.filter(r => selectedRounds.has(r));
+
+        const config = {
+          job: selectedJob,
+          level: selectedLevel,
+          round: sortedRounds[0],
+          rounds: sortedRounds,
+          type: Array.from(selectedTypes),
+          duration: selectedDuration,
+          input: selectedInput,
+        };
+
+        localStorage.setItem('interviewConfig', JSON.stringify(config));
+        console.log('[配置页] 面试配置已保存:', config);
+
+        window.location.href = 'interview.html';
+
+      } catch (err) {
+        console.error('[配置页] 开始面试失败:', err);
+        alert('准备面试时出错，请重试');
+        btn.disabled = false;
+        btn.textContent = '开始面试 →';
+      }
+    }
+
+    // ===========================
+    // JD 输入监听
+    // ===========================
+
+    function initJDListener() {
+      const jdText = document.getElementById('jd-text');
+      jdText.addEventListener('input', () => updateSummary());
+    }
+
+    // ===========================
+    // 页面初始化
+    // ===========================
+
+    (function init() {
+      // 检查登录态
+      if (!isLoggedIn()) {
+        // 未登录跳转到登录页（或允许继续）
+        // 这里允许免登录体验，但在底部摘要中提示
+      }
+
+      // 渲染所有选项
+      renderJobs();
+      renderSingleSelect('level-grid', levels, () => selectedLevel, selectLevel);
+      renderMultiSelect('rounds-grid', roundOptions, selectedRounds, toggleRound);
+      renderMultiSelect('type-grid', typeOptions, selectedTypes, toggleType);
+      renderSingleSelect('duration-grid', durationOptions, () => selectedDuration, selectDuration);
+      renderSingleSelect('input-grid', inputOptions, () => selectedInput, selectInput);
+      updateDeviceInfo();
+
+      // 初始化简历相关
+      initResumeSource();
+      initFileUpload();
+      initJDImageUpload();
+      initJDListener();
+
+      // 消费一次性数据
+      consumePendingData();
+
+      // 加载额度
+      loadQuota();
+
+      // 初始摘要
+      updateSummary();
+
+      console.log('[配置页] 页面初始化完成');
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            brand: { from: '#6366F1', to: '#8B5CF6' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    /* 品牌渐变按钮 */
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-brand:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+    }
+    .btn-brand:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .btn-brand:not(:disabled)::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 60%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+      transition: left 0.5s ease;
+    }
+    .btn-brand:not(:disabled):hover::after { left: 120%; }
+
+    /* Tab 切换 */
+    .tab-active {
+      border-bottom-color: #6366F1;
+      color: #111827;
+      font-weight: 600;
+    }
+    .tab-inactive {
+      border-bottom-color: transparent;
+      color: #9CA3AF;
+    }
+    .tab-inactive:hover { color: #6B7280; }
+
+    /* 输入框 focus */
+    .input-field {
+      transition: all 0.2s ease;
+    }
+    .input-field:focus {
+      border-color: #6366F1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] min-h-screen flex flex-col items-center justify-center font-sans relative overflow-hidden text-[#111827] px-4">
+
+  <!-- 背景模糊光斑 -->
+  <div class="absolute bottom-0 left-0 w-[500px] h-[500px] rounded-full pointer-events-none -translate-x-1/3 translate-y-1/3"
+       style="background: rgba(99,102,241,0.35); filter: blur(80px);"></div>
+  <div class="absolute top-0 right-0 w-[500px] h-[500px] rounded-full pointer-events-none translate-x-1/3 -translate-y-1/3"
+       style="background: rgba(139,92,246,0.3); filter: blur(80px);"></div>
+
+  <!-- Logo 区域 -->
+  <div class="flex flex-col items-center mb-8 z-10">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl"
+            style="background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); box-shadow: 0 4px 14px rgba(99,102,241,0.3);">🪞</span>
+      <span class="text-2xl font-bold text-gray-900 tracking-tight">AI面镜</span>
+    </div>
+    <p class="text-gray-400 text-sm">照见真实的面试表现</p>
+  </div>
+
+  <!-- 登录/注册卡片 -->
+  <div class="bg-white rounded-2xl p-8 w-full max-w-[420px] z-10 relative"
+       style="box-shadow: 0 4px 24px rgba(99,102,241,0.06), 0 1px 3px rgba(0,0,0,0.04);">
+
+    <!-- Tab 切换 -->
+    <div class="flex border-b border-gray-100 mb-6">
+      <button id="tab-login" type="button"
+              class="flex-1 pb-3 text-sm text-center border-b-2 tab-active transition-colors"
+              onclick="switchTab('login')">登录</button>
+      <button id="tab-register" type="button"
+              class="flex-1 pb-3 text-sm text-center border-b-2 tab-inactive transition-colors"
+              onclick="switchTab('register')">注册</button>
+    </div>
+
+    <!-- 消息提示区 -->
+    <div id="msg-box" class="hidden text-sm text-center py-2.5 px-3 rounded-xl mb-4 font-medium"></div>
+
+    <!-- ==================== 登录面板 ==================== -->
+    <div id="panel-login">
+      <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">邮箱</label>
+          <input type="email" id="login-email" required placeholder="请输入邮箱"
+                 class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+          <input type="password" id="login-pwd" required minlength="6" placeholder="至少 6 位密码"
+                 class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+        </div>
+        <button type="submit" id="btn-login"
+                class="btn-brand relative overflow-hidden w-full py-3 rounded-xl text-white font-semibold text-sm">
+          登录
+        </button>
+      </form>
+    </div>
+
+    <!-- ==================== 注册面板 ==================== -->
+    <div id="panel-register" class="hidden">
+      <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">邮箱</label>
+          <input type="email" id="reg-email" required placeholder="请输入邮箱"
+                 class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+          <input type="password" id="reg-pwd" required minlength="6" placeholder="至少 6 位密码"
+                 class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 outline-none text-sm">
+          <p class="text-[11px] text-gray-400 mt-1.5">设置完成后可用邮箱 + 密码直接登录</p>
+        </div>
+        <button type="submit" id="btn-register"
+                class="btn-brand relative overflow-hidden w-full py-3 rounded-xl text-white font-semibold text-sm">
+          注册
+        </button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- 卡片下方 -->
+  <div class="mt-6 z-10 text-center">
+    <a href="onboarding.html" class="text-sm text-gray-400 hover:text-primary transition-colors">
+      不想登录？先免费体验一次 →
+    </a>
+  </div>
+  <div class="mt-6 z-10 flex items-center gap-3 text-[11px] text-gray-400">
+    <a href="terms.html" class="hover:text-gray-600 transition-colors">用户协议</a>
+    <span>·</span>
+    <a href="privacy.html" class="hover:text-gray-600 transition-colors">隐私政策</a>
+  </div>
+
+  <!-- 外部资源 -->
+  <script src="supabase-config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    // ===== 初始化 Supabase =====
+    let sb;
+    try {
+      sb = supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+      console.log('[登录页] Supabase 初始化成功');
+    } catch (initErr) {
+      console.error('[登录页] Supabase 初始化失败:', initErr);
+      alert('系统初始化失败，请刷新页面重试');
+    }
+
+    // ===== 页面初始化 =====
+    (function init() {
+      // 已登录自动跳转
+      checkExistingSession();
+
+      // URL 参数 ?register=1 自动切到注册 Tab
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('register') === '1') {
+        switchTab('register');
+      }
+    })();
+
+    // 检查现有会话
+    async function checkExistingSession() {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+          console.log('[登录页] 检测到已有登录会话，自动跳转');
+          window.location.href = 'setup.html';
+        }
+      } catch (e) {
+        console.warn('[登录页] 检查会话失败:', e);
+      }
+    }
+
+    // ===== Tab 切换 =====
+    function switchTab(tab) {
+      const loginBtn = document.getElementById('tab-login');
+      const regBtn = document.getElementById('tab-register');
+      const loginPanel = document.getElementById('panel-login');
+      const regPanel = document.getElementById('panel-register');
+
+      hideMsg();
+
+      if (tab === 'login') {
+        loginBtn.classList.add('tab-active'); loginBtn.classList.remove('tab-inactive');
+        regBtn.classList.add('tab-inactive'); regBtn.classList.remove('tab-active');
+        loginPanel.classList.remove('hidden');
+        regPanel.classList.add('hidden');
+      } else {
+        regBtn.classList.add('tab-active'); regBtn.classList.remove('tab-inactive');
+        loginBtn.classList.add('tab-inactive'); loginBtn.classList.remove('tab-active');
+        regPanel.classList.remove('hidden');
+        loginPanel.classList.add('hidden');
+      }
+    }
+
+    // ===== 消息提示 =====
+    function showMsg(text, type) {
+      const box = document.getElementById('msg-box');
+      box.textContent = text;
+      box.classList.remove('hidden', 'bg-green-50', 'text-green-600', 'bg-red-50', 'text-red-600', 'bg-yellow-50', 'text-yellow-600');
+      if (type === 'success') box.classList.add('bg-green-50', 'text-green-600');
+      else if (type === 'warning') box.classList.add('bg-yellow-50', 'text-yellow-600');
+      else box.classList.add('bg-red-50', 'text-red-600');
+    }
+    function hideMsg() {
+      document.getElementById('msg-box').classList.add('hidden');
+    }
+
+    // ===== 登录 =====
+    async function handleLogin(e) {
+      e.preventDefault();
+      hideMsg();
+
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-pwd').value;
+      const btn = document.getElementById('btn-login');
+
+      btn.disabled = true;
+      btn.textContent = '登录中...';
+
+      try {
+        console.log('[登录页] 密码登录请求:', { email });
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        console.log('[登录页] signInWithPassword 响应:', { data, error });
+
+        if (error) {
+          const msg = error.message || '';
+          console.error('[登录页] 登录失败:', error);
+
+          // 为什么按关键词映射：Supabase 返回英文错误，用户需要中文提示和可操作建议
+          if (msg.includes('Invalid login credentials') || msg.includes('invalid login')) {
+            showMsg('邮箱或密码错误', 'error');
+          } else if (msg.includes('Email not confirmed') || msg.includes('email not confirmed')) {
+            showMsg('账号异常，请重新注册', 'error');
+          } else if (msg.includes('rate limit') || msg.includes('Rate limit')) {
+            showMsg('请求过于频繁，请稍后再试', 'warning');
+          } else {
+            showMsg('登录失败：' + msg, 'error');
+          }
+        } else {
+          showMsg('登录成功，正在跳转...', 'success');
+          setTimeout(() => { window.location.href = 'setup.html'; }, 800);
+        }
+      } catch (err) {
+        console.error('[登录页] 登录异常:', err);
+        showMsg('网络异常，请检查网络后重试', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '登录';
+      }
+    }
+
+    // ===== 注册 =====
+    async function handleRegister(e) {
+      e.preventDefault();
+      hideMsg();
+
+      const email = document.getElementById('reg-email').value.trim();
+      const password = document.getElementById('reg-pwd').value;
+      const btn = document.getElementById('btn-register');
+
+      if (password.length < 6) {
+        showMsg('密码至少需要 6 位', 'error');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '注册中...';
+
+      try {
+        console.log('[登录页] 注册请求:', { email });
+        // 为什么用 signUp：Supabase signUp + 后台关闭邮箱确认 = 注册后直接返回 session，无需邮件验证
+        const { data, error } = await sb.auth.signUp({ email, password });
+        console.log('[登录页] signUp 响应:', { data, error });
+
+        if (error) {
+          const msg = error.message || '';
+          console.error('[登录页] 注册失败:', error);
+
+          if (msg.includes('already registered') || msg.includes('already been registered')) {
+            showMsg('该邮箱已注册，请直接登录', 'warning');
+            // 自动切到登录 Tab，提升体验
+            setTimeout(() => {
+              switchTab('login');
+              document.getElementById('login-email').value = email;
+            }, 800);
+          } else if (msg.includes('rate limit') || msg.includes('Rate limit')) {
+            showMsg('请求过于频繁，请稍后再试', 'warning');
+          } else {
+            showMsg('注册失败：' + msg, 'error');
+          }
+        } else {
+          showMsg('注册成功，正在跳转...', 'success');
+          setTimeout(() => { window.location.href = 'setup.html'; }, 800);
+        }
+      } catch (err) {
+        console.error('[登录页] 注册异常:', err);
+        showMsg('网络异常，请检查网络后重试', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '注册';
+      }
+    }
+  </script>
+</body>
+</html>

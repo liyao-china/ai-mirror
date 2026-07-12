@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>完善背景信息 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              DEFAULT: '#6366F1',
+              light: '#8B5CF6',
+            },
+            success: '#10B981',
+            warning: '#F59E0B',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: Inter, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background-color: #F9FAFB;
+      color: #111827;
+    }
+    .brand-gradient {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+    }
+    .card-shadow {
+      box-shadow: 0 4px 20px rgba(99, 102, 241, 0.08);
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      transition: all 0.2s ease;
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99, 102, 241, 0.35);
+    }
+    .drop-zone {
+      transition: all 0.2s ease;
+    }
+    .drop-zone.dragover {
+      border-color: #6366F1;
+      background-color: rgba(99, 102, 241, 0.04);
+    }
+    .status-bar {
+      transition: all 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-20">
+
+  <!-- 简化导航栏 -->
+  <nav class="w-full px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="brand-gradient rounded-xl w-10 h-10 flex items-center justify-center text-white text-lg font-bold">
+        🪞
+      </div>
+      <span class="text-lg font-semibold text-gray-900">AI面镜</span>
+    </div>
+    <a href="setup.html" class="text-gray-500 hover:text-brand text-sm flex items-center gap-1 transition-colors">
+      跳过
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+      </svg>
+    </a>
+  </nav>
+
+  <!-- 页面标题区 -->
+  <div class="text-center px-6 pt-6 pb-8">
+    <h1 class="text-3xl font-bold text-gray-900 mb-2">完善你的背景信息</h1>
+    <p class="text-gray-500 text-base">这些信息将用于生成更贴合你的个性化面试题目</p>
+  </div>
+
+  <div class="max-w-3xl mx-auto px-6 space-y-6">
+
+    <!-- 卡片 1：上传/粘贴简历 -->
+    <div class="bg-white rounded-2xl card-shadow p-6 md:p-8">
+      <div id="resumeStatusBar" class="status-bar hidden items-center gap-2 bg-indigo-50 text-indigo-600 rounded-lg px-3 py-2 text-sm mb-3">
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <span id="resumeStatusText"></span>
+      </div>
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">📄 上传/粘贴简历</h2>
+      
+      <!-- 拖拽上传区 -->
+      <div
+        id="dropZone"
+        class="drop-zone border-dashed border-2 border-gray-300 rounded-xl p-8 text-center cursor-pointer mb-4"
+      >
+        <svg class="w-10 h-10 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <p class="text-gray-600 text-sm mb-1">拖拽 PDF 到此处，或 <span class="text-brand font-medium">点击上传</span></p>
+        <p class="text-gray-400 text-xs">支持 .pdf 格式</p>
+        <input type="file" id="pdfInput" accept=".pdf" class="hidden">
+      </div>
+
+      <!-- 简历文本编辑区 -->
+      <label class="block text-sm font-medium text-gray-700 mb-2">简历内容</label>
+      <textarea
+        id="resumeText"
+        rows="10"
+        class="w-full border border-gray-200 rounded-xl p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-y"
+        placeholder="请在此处粘贴或编辑简历内容..."></textarea>
+      
+      <p class="text-xs text-gray-400 mt-2 flex items-center gap-1">
+        <span>🔒</span>
+        <span>内容保存在当前浏览器；开始面试后会发送至 AI 服务用于生成题目和评分。</span>
+      </p>
+    </div>
+
+    <!-- 卡片 2：目标岗位 JD -->
+    <div class="bg-white rounded-2xl card-shadow p-6 md:p-8">
+      <div id="jdStatusBar" class="status-bar hidden items-center gap-2 bg-indigo-50 text-indigo-600 rounded-lg px-3 py-2 text-sm mb-3">
+        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <span id="jdStatusText"></span>
+      </div>
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold text-gray-900">🎯 目标岗位 JD</h2>
+        <button
+          id="uploadJdBtn"
+          class="text-sm text-brand hover:text-brand-light flex items-center gap-1 transition-colors"
+        >
+          <span>🖼️</span>
+          <span>上传 JD 截图解析</span>
+        </button>
+        <input type="file" id="jdImageInput" accept="image/*" class="hidden">
+      </div>
+      
+      <textarea
+        id="jdText"
+        rows="6"
+        class="w-full border border-gray-200 rounded-xl p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent resize-y"
+        placeholder="请粘贴目标岗位的职位描述（JD）..."></textarea>
+    </div>
+
+    <!-- 卡片 3：手动关键信息 -->
+    <div class="bg-white rounded-2xl card-shadow p-6 md:p-8">
+      <h2 class="text-lg font-semibold text-gray-900 mb-4">📝 手动关键信息</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- 工作年限 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">工作年限</label>
+          <select
+            id="workYears"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent bg-white"
+          >
+            <option value="">请选择</option>
+            <option value="在校/实习">在校/实习</option>
+            <option value="应届毕业">应届毕业</option>
+            <option value="1-3 年">1-3 年</option>
+            <option value="3-5 年">3-5 年</option>
+            <option value="5-8 年">5-8 年</option>
+            <option value="8 年以上">8 年以上</option>
+          </select>
+        </div>
+
+        <!-- 目标岗位 -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">目标岗位</label>
+          <input
+            type="text"
+            id="targetJob"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+            placeholder="如：后端开发工程师"
+          >
+        </div>
+
+        <!-- 技术栈/技能 -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">技术栈/技能</label>
+          <input
+            type="text"
+            id="skills"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+            placeholder="用逗号分隔，如：Python, PyTorch, 产品数据分析"
+          >
+        </div>
+
+        <!-- 目标公司（选填） -->
+        <div class="md:col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-2">目标公司（选填）</label>
+          <input
+            type="text"
+            id="targetCompany"
+            class="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent"
+            placeholder="如：字节跳动"
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- 保存按钮 -->
+    <div class="pt-2">
+      <button
+        id="saveBtn"
+        class="btn-primary w-full text-white font-semibold py-4 rounded-xl text-base flex items-center justify-center gap-2"
+      >
+        <span>保存并开始配置面试</span>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+        </svg>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- 外部资源 -->
+  <script src="supabase-config.js"></script>
+  <script src="ai-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script>
+    // 配置 PDF.js worker，必须在加载后设置
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+
+    // ============================
+    // 状态提示工具函数
+    // ============================
+
+    /**
+     * 显示卡片顶部状态条
+     * @param {string} barId - 状态条元素 ID
+     * @param {string} textId - 状态文本元素 ID
+     * @param {string} text - 要显示的文本
+     * @param {string} type - 状态类型: 'loading' | 'success' | 'warning' | 'error'
+     */
+    function showStatus(barId, textId, text, type) {
+      const bar = document.getElementById(barId);
+      const txt = document.getElementById(textId);
+      txt.textContent = text;
+      bar.classList.remove('hidden', 'bg-indigo-50', 'text-indigo-600', 'bg-green-50', 'text-green-600', 'bg-yellow-50', 'text-yellow-600', 'bg-red-50', 'text-red-600');
+      bar.classList.add('flex');
+      
+      if (type === 'success') {
+        bar.classList.add('bg-green-50', 'text-green-600');
+      } else if (type === 'warning') {
+        bar.classList.add('bg-yellow-50', 'text-yellow-600');
+      } else if (type === 'error') {
+        bar.classList.add('bg-red-50', 'text-red-600');
+      } else {
+        bar.classList.add('bg-indigo-50', 'text-indigo-600');
+      }
+    }
+
+    /**
+     * 隐藏状态条
+     */
+    function hideStatus(barId) {
+      const bar = document.getElementById(barId);
+      bar.classList.add('hidden');
+      bar.classList.remove('flex');
+    }
+
+    // ============================
+    // 卡片 1：PDF 上传与解析
+    // ============================
+
+    const dropZone = document.getElementById('dropZone');
+    const pdfInput = document.getElementById('pdfInput');
+    const resumeText = document.getElementById('resumeText');
+
+    // 点击上传区触发文件选择
+    dropZone.addEventListener('click', () => pdfInput.click());
+
+    // 文件选择后处理
+    pdfInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) handlePdfFile(file);
+      pdfInput.value = ''; // 清空以便可以再次选择同一文件
+    });
+
+    // 拖拽进入
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+
+    // 拖拽离开
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
+
+    // 拖拽放下
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') {
+        handlePdfFile(file);
+      } else if (file) {
+        showStatus('resumeStatusBar', 'resumeStatusText', '⚠️ 请上传 PDF 格式文件', 'warning');
+      }
+    });
+
+    /**
+     * 处理 PDF 文件：提取文字并用 AI 整理
+     * @param {File} file - PDF 文件对象
+     */
+    async function handlePdfFile(file) {
+      try {
+        showStatus('resumeStatusBar', 'resumeStatusText', '⏳ 正在读取 PDF 文件...', 'loading');
+
+        // 将文件转为 ArrayBuffer，供 pdf.js 读取
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const numPages = pdf.numPages;
+        
+        let rawText = '';
+        
+        // 逐页提取文字
+        for (let i = 1; i <= numPages; i++) {
+          showStatus('resumeStatusBar', 'resumeStatusText', `⏳ 正在提取第 ${i}/${numPages} 页...`, 'loading');
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          rawText += pageText + '\n';
+        }
+
+        rawText = rawText.trim();
+
+        // 兜底：如果提取不到文字，提示用户手动粘贴
+        if (!rawText) {
+          showStatus('resumeStatusBar', 'resumeStatusText', '⚠️ 未能提取到文字，请手动粘贴简历内容', 'warning');
+          return;
+        }
+
+        // 先把原始文字填入 textarea，即使后续 AI 失败也有内容
+        resumeText.value = rawText;
+        showStatus('resumeStatusBar', 'resumeStatusText', '⏳ 正在用 AI 整理简历...', 'loading');
+
+        // 调用 AI 整理简历
+        try {
+          const systemPrompt = '你是一个专业的简历整理助手，擅长把乱序文字整理成结构清晰的简历。';
+          const userPrompt = '把以下 PDF 提取的乱序文字整理成结构清晰的简历，按【个人信息】【教育背景】【工作/实习经历】【项目经历】【专业技能】【其他】组织，忠实原文不编造，保留所有量化成果如"提升40%"，只输出整理后的简历：\n\n' + rawText;
+          
+          const result = await AIProxy.chat([
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ]);
+
+          // 用整理结果覆盖 textarea
+          if (result && result.trim()) {
+            resumeText.value = result.trim();
+            showStatus('resumeStatusBar', 'resumeStatusText', '✅ AI 已整理好简历', 'success');
+            // 3 秒后自动隐藏成功提示
+            setTimeout(() => hideStatus('resumeStatusBar'), 3000);
+          } else {
+            throw new Error('AI 返回内容为空');
+          }
+        } catch (aiError) {
+          // AI 整理失败时保留原始文字，不覆盖
+          console.error('AI 整理失败:', aiError);
+          showStatus('resumeStatusBar', 'resumeStatusText', '⚠️ AI 整理失败，已保留原始提取内容，请手动编辑', 'warning');
+        }
+
+      } catch (error) {
+        console.error('PDF 解析失败:', error);
+        showStatus('resumeStatusBar', 'resumeStatusText', '⚠️ PDF 解析失败，请手动粘贴简历内容', 'warning');
+      }
+    }
+
+    // ============================
+    // 卡片 2：JD 截图解析
+    // ============================
+
+    const uploadJdBtn = document.getElementById('uploadJdBtn');
+    const jdImageInput = document.getElementById('jdImageInput');
+    const jdText = document.getElementById('jdText');
+
+    // 点击按钮触发图片选择
+    uploadJdBtn.addEventListener('click', () => jdImageInput.click());
+
+    // 选择图片后处理
+    jdImageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) handleJdImage(file);
+      jdImageInput.value = ''; // 清空以便可以再次选择同一文件
+    });
+
+    /**
+     * 处理 JD 截图：转为 base64 并调用 AI 视觉识别
+     * @param {File} file - 图片文件对象
+     */
+    async function handleJdImage(file) {
+      try {
+        showStatus('jdStatusBar', 'jdStatusText', '⏳ 正在解析 JD 截图...', 'loading');
+
+        // 将图片转为 base64 DataURL
+        const base64DataURL = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+
+        // 调用 AI 视觉接口识别图片中的 JD 内容
+        const result = await AIProxy.vision([
+          { role: 'user', content: [
+            { type: 'text', text: '请准确提取图片中的岗位职责、任职要求和加分项，只输出整理后的中文岗位JD，不要解释。' },
+            { type: 'image_url', image_url: { url: base64DataURL } }
+          ]}
+        ]);
+
+        // 将识别结果追加填入 textarea
+        if (result && result.trim()) {
+          const currentText = jdText.value.trim();
+          if (currentText) {
+            jdText.value = currentText + '\n\n' + result.trim();
+          } else {
+            jdText.value = result.trim();
+          }
+          showStatus('jdStatusBar', 'jdStatusText', '✅ JD 截图已解析', 'success');
+          setTimeout(() => hideStatus('jdStatusBar'), 3000);
+        } else {
+          throw new Error('识别结果为空');
+        }
+
+      } catch (error) {
+        console.error('JD 截图解析失败:', error);
+        showStatus('jdStatusBar', 'jdStatusText', '⚠️ 截图解析失败，请手动粘贴', 'warning');
+      }
+    }
+
+    // ============================
+    // 卡片 3 & 保存逻辑
+    // ============================
+
+    const workYears = document.getElementById('workYears');
+    const targetJob = document.getElementById('targetJob');
+    const skills = document.getElementById('skills');
+    const targetCompany = document.getElementById('targetCompany');
+    const saveBtn = document.getElementById('saveBtn');
+
+    saveBtn.addEventListener('click', () => {
+      // 获取所有字段值
+      const resumeTextVal = resumeText.value.trim();
+      const jdTextVal = jdText.value.trim();
+      const workYearsVal = workYears.value.trim();
+      const targetJobVal = targetJob.value.trim();
+      const skillsVal = skills.value.trim();
+      const targetCompanyVal = targetCompany.value.trim();
+
+      // 至少填一项才放行
+      if (!resumeTextVal && !jdTextVal && !workYearsVal && !targetJobVal && !skillsVal) {
+        alert('请至少填写一项信息');
+        return;
+      }
+
+      // 拼装 resumeInfo
+      let resumeInfo = '';
+      if (resumeTextVal) resumeInfo = '【简历内容】\n' + resumeTextVal;
+      if (workYearsVal) resumeInfo += '\n工作年限：' + workYearsVal;
+      if (targetJobVal) resumeInfo += '\n目标岗位：' + targetJobVal;
+      if (skillsVal) resumeInfo += '\n技术栈/技能：' + skillsVal;
+      if (targetCompanyVal) resumeInfo += '\n目标公司：' + targetCompanyVal;
+
+      // 保存到 localStorage
+      localStorage.setItem('resumeInfo', resumeInfo.trim());
+      localStorage.setItem('jdInfo', jdTextVal);
+      // 一次性交接键
+      localStorage.setItem('pendingJD', jdTextVal);
+      localStorage.setItem('pendingTargetJob', targetJobVal);
+
+      // 跳转到 setup.html
+      window.location.href = 'setup.html';
+    });
+  </script>
+</body>
+</html>

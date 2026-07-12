@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+._*
+
+# 临时上传暂存目录
+.uploads/
+
+# Supabase CLI 本地链接状态（非源码，勿提交）
+supabase/.temp/
+
+# 依赖与构建产物
+node_modules/
+dist/
+build/
+
+# 环境变量与本地配置（防止密钥泄露）
+.env
+.env.*
+*.local
+
+# 编辑器
+.vscode/
+.idea/

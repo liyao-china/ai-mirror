@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人设置 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            'primary-light': '#818CF8',
+            'brand-from': '#6366F1',
+            'brand-to': '#8B5CF6',
+            success: '#10B981',
+            warning: '#F59E0B',
+            dark: '#111827',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+      transition: all 0.25s ease;
+    }
+    .btn-brand:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.4);
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] text-dark font-sans min-h-screen flex items-center justify-center px-6">
+  <div class="bg-white rounded-2xl p-10 max-w-lg w-full text-center border border-gray-100/60" style="box-shadow:0 4px 20px rgba(99,102,241,0.08);">
+    <div class="text-6xl mb-6">⚙️</div>
+    <h1 class="text-2xl font-bold text-dark mb-3">设置功能开发中</h1>
+    <p class="text-gray-500 text-sm leading-relaxed">个人设置、偏好配置等功能正在开发中，敬请期待。</p>
+    <div class="mt-8">
+      <a href="index.html" class="btn-brand inline-block text-white font-semibold py-3 px-8 rounded-xl">返回首页</a>
+    </div>
+  </div>
+</body>
+</html>

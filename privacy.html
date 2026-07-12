@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>隐私政策 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            'primary-light': '#818CF8',
+            'brand-from': '#6366F1',
+            'brand-to': '#8B5CF6',
+            success: '#10B981',
+            warning: '#F59E0B',
+            dark: '#111827',
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.3);
+      transition: all 0.25s ease;
+    }
+    .btn-brand:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.4);
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] text-dark font-sans min-h-screen flex items-center justify-center px-6">
+  <div class="bg-white rounded-2xl p-10 max-w-lg w-full text-center border border-gray-100/60" style="box-shadow:0 4px 20px rgba(99,102,241,0.08);">
+    <div class="text-6xl mb-6">🔒</div>
+    <h1 class="text-2xl font-bold text-dark mb-6">隐私政策</h1>
+    <div class="text-left text-gray-500 text-sm leading-relaxed space-y-3">
+      <p>AI面镜重视您的隐私保护。我们的数据政策如下：</p>
+      <ol class="list-decimal list-inside space-y-2">
+        <li>数据仅用于生成面试题目与报告，不会与第三方共享。</li>
+        <li>面试过程不录制、不上传视频；语音识别在本地浏览器完成。</li>
+        <li>账号信息存储于 Supabase，采用行业标准的加密和访问控制措施。</li>
+        <li>您可以随时在设置中查看、导出或删除自己的所有数据。</li>
+        <li>如有隐私相关问题，请联系 <a href="mailto:contact@ai-mirror.example.com" class="text-primary hover:underline">contact@ai-mirror.example.com</a>。</li>
+      </ol>
+    </div>
+    <div class="mt-8">
+      <a href="index.html" class="btn-brand inline-block text-white font-semibold py-3 px-8 rounded-xl">返回首页</a>
+    </div>
+  </div>
+</body>
+</html>

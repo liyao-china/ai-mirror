@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>成长曲线 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            brand: { from: '#6366F1', to: '#8B5CF6' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(99,102,241,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(139,92,246,0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > * { position: relative; z-index: 1; }
+
+    /* 品牌渐变按钮 */
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-brand:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.35);
+    }
+
+    /* 卡片统一样式 */
+    .card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.08);
+    }
+
+    /* 加载旋转动画 */
+    @keyframes spin-slow {
+      to { transform: rotate(360deg); }
+    }
+    .loader-spinner {
+      width: 40px; height: 40px;
+      border: 3px solid #E5E7EB;
+      border-top-color: #6366F1;
+      border-radius: 50%;
+      animation: spin-slow 0.8s linear infinite;
+    }
+
+    /* 自定义确认弹窗遮罩 */
+    .confirm-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* 记录卡片悬停 */
+    .record-card {
+      transition: all 0.2s ease;
+    }
+    .record-card:hover {
+      box-shadow: 0 6px 24px rgba(99,102,241,0.12);
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] min-h-screen flex flex-col font-sans text-[#111827]">
+
+  <!-- 顶部导航 -->
+  <nav class="w-full bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2">
+        <span class="w-9 h-9 rounded-xl flex items-center justify-center text-xl" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)">🪞</span>
+        <span class="text-lg font-bold text-gray-900">AI面镜</span>
+      </a>
+      <div class="flex items-center gap-4">
+        <a href="setup.html" class="text-sm text-gray-500 hover:text-primary transition-colors">开始面试</a>
+        <a href="history.html" class="text-sm text-primary font-semibold transition-colors">成长曲线</a>
+        <a href="membership.html" class="text-sm text-gray-500 hover:text-primary transition-colors">会员</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 主内容 -->
+  <main class="flex-1 max-w-6xl mx-auto w-full px-6 pt-8 pb-20">
+
+    <!-- 页面标题 -->
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 mb-2">成长曲线</h1>
+      <p class="text-gray-500 text-sm">追踪你的面试表现，看到每一步进步</p>
+    </div>
+
+    <!-- 加载状态 -->
+    <div id="loading-state" class="flex flex-col items-center justify-center py-24">
+      <div class="loader-spinner mb-4"></div>
+      <p class="text-gray-500 text-sm">正在加载历史记录...</p>
+    </div>
+
+    <!-- 空状态 -->
+    <div id="empty-state" class="hidden flex flex-col items-center justify-center py-24">
+      <div class="w-20 h-20 rounded-2xl bg-indigo-50 flex items-center justify-center mb-6">
+        <span class="text-4xl">📊</span>
+      </div>
+      <h2 class="text-xl font-bold text-gray-900 mb-2">还没有面试记录</h2>
+      <p class="text-gray-500 text-sm mb-6">完成你的第一场模拟面试，开启成长之旅</p>
+      <a href="setup.html" class="btn-brand px-8 py-3 rounded-xl text-white font-semibold text-sm">开始第一场面试</a>
+    </div>
+
+    <!-- 数据内容区（加载完成且有数据时显示） -->
+    <div id="content-area" class="hidden">
+
+      <!-- 四张统计卡 -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <!-- 累计面试 -->
+        <div class="card p-5">
+          <p class="text-xs text-gray-400 mb-1">累计面试</p>
+          <p class="text-2xl font-bold text-gray-900" id="stat-count">0</p>
+          <p class="text-xs text-gray-400 mt-1">场</p>
+        </div>
+        <!-- 最新得分 -->
+        <div class="card p-5">
+          <p class="text-xs text-gray-400 mb-1">最新得分</p>
+          <p class="text-2xl font-bold" id="stat-latest" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">—</p>
+          <p class="text-xs text-gray-400 mt-1">分</p>
+        </div>
+        <!-- 最佳得分 -->
+        <div class="card p-5">
+          <p class="text-xs text-gray-400 mb-1">最佳得分</p>
+          <p class="text-2xl font-bold text-green-500" id="stat-best">—</p>
+          <p class="text-xs text-gray-400 mt-1">分</p>
+        </div>
+        <!-- 较上次提升 -->
+        <div class="card p-5">
+          <p class="text-xs text-gray-400 mb-1">较上次提升</p>
+          <p class="text-2xl font-bold text-gray-900" id="stat-diff">—</p>
+          <p class="text-xs text-gray-400 mt-1">分</p>
+        </div>
+      </div>
+
+      <!-- 图表区域 -->
+      <div id="charts-area" class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- 综合得分趋势图 -->
+        <div class="card p-6">
+          <h3 class="text-base font-semibold text-gray-900 mb-4">综合得分趋势</h3>
+          <div style="height:260px;" id="trend-chart-wrapper">
+            <canvas id="trend-chart"></canvas>
+          </div>
+        </div>
+        <!-- 各维度成长对比图 -->
+        <div class="card p-6">
+          <h3 class="text-base font-semibold text-gray-900 mb-4">维度成长对比</h3>
+          <div style="height:260px;" id="dimension-chart-wrapper">
+            <canvas id="dimension-chart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史记录列表 -->
+      <div class="card p-6">
+        <h3 class="text-base font-semibold text-gray-900 mb-4">面试记录</h3>
+        <div id="records-list" class="space-y-3">
+          <!-- 由 JS 动态渲染 -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- 自定义确认弹窗（默认隐藏） -->
+  <div id="confirm-modal" class="confirm-overlay hidden">
+    <div class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4" style="box-shadow:0 8px 32px rgba(0,0,0,0.15);">
+      <p class="text-base font-semibold text-gray-900 mb-2" id="confirm-title">确认删除</p>
+      <p class="text-sm text-gray-500 mb-6" id="confirm-message">确定要删除这条面试记录吗？此操作不可撤销。</p>
+      <div class="flex gap-3 justify-end">
+        <button id="confirm-cancel" class="px-5 py-2 rounded-xl text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors">取消</button>
+        <button id="confirm-ok" class="px-5 py-2 rounded-xl text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-colors">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示 Toast（默认隐藏） -->
+  <div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 z-[999] hidden">
+    <div class="bg-gray-800 text-white text-sm px-5 py-3 rounded-xl shadow-lg">
+      <span id="toast-text"></span>
+    </div>
+  </div>
+
+  <!-- 外部资源 -->
+  <script src="supabase-config.js"></script>
+  <script src="ai-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // ===========================
+    // 维度中文名映射
+    // ===========================
+    const dimNames = {
+      jobMatch: '岗位匹配度', logic: '逻辑清晰度', fluency: '语言流畅度',
+      depth: '专业深度', confidence: '自信心', value: '价值表达'
+    };
+    // 维度固定顺序（与柱状图一致）
+    const dimKeys = ['jobMatch', 'logic', 'fluency', 'depth', 'confidence', 'value'];
+
+    // ===========================
+    // 得分颜色函数
+    // ===========================
+    function scoreColor(s) {
+      if (s >= 80) return '#10B981';
+      if (s >= 60) return '#6366F1';
+      return '#F59E0B';
+    }
+
+    // ===========================
+    // 全局状态
+    // ===========================
+    let allRecords = [];        // 统一处理后的全部记录（时间正序）
+    let isCloudMode = false;    // 当前是否为云端数据
+    let trendChart = null;      // Chart.js 折线图实例
+    let dimChart = null;         // Chart.js 柱状图实例
+
+    // ===========================
+    // 工具函数
+    // ===========================
+
+    /** 检查用户是否已登录（localStorage 存在 sb-*-auth-token 键） */
+    function isLoggedIn() {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && /^sb-.*-auth-token$/.test(key)) return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    /** 安全读取 JSON */
+    function safeGetJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+    }
+
+    /** 显示 Toast 提示（替代 alert） */
+    function showToast(text, duration) {
+      duration = duration || 2500;
+      const el = document.getElementById('toast');
+      const span = document.getElementById('toast-text');
+      span.textContent = text;
+      el.classList.remove('hidden');
+      clearTimeout(el._timer);
+      el._timer = setTimeout(() => { el.classList.add('hidden'); }, duration);
+    }
+
+    /**
+     * 自定义确认弹窗（替代 confirm）
+     * 返回 Promise<boolean>
+     */
+    function showConfirm(title, message) {
+      return new Promise(function(resolve) {
+        const modal = document.getElementById('confirm-modal');
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-message').textContent = message;
+        modal.classList.remove('hidden');
+
+        const btnOk = document.getElementById('confirm-ok');
+        const btnCancel = document.getElementById('confirm-cancel');
+
+        function cleanup() {
+          modal.classList.add('hidden');
+          btnOk.removeEventListener('click', onOk);
+          btnCancel.removeEventListener('click', onCancel);
+          modal.removeEventListener('click', onOverlay);
+        }
+        function onOk() { cleanup(); resolve(true); }
+        function onCancel() { cleanup(); resolve(false); }
+        function onOverlay(e) { if (e.target === modal) { cleanup(); resolve(false); } }
+
+        btnOk.addEventListener('click', onOk);
+        btnCancel.addEventListener('click', onCancel);
+        modal.addEventListener('click', onOverlay);
+      });
+    }
+
+    /** 格式化日期 */
+    function formatDate(dateStr) {
+      try {
+        const d = new Date(dateStr);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        const h = String(d.getHours()).padStart(2, '0');
+        const min = String(d.getMinutes()).padStart(2, '0');
+        return y + '-' + m + '-' + day + ' ' + h + ':' + min;
+      } catch (e) {
+        return dateStr || '未知时间';
+      }
+    }
+
+    // ===========================
+    // 数据加载
+    // ===========================
+
+    /** 初始化 Supabase 客户端（仅 CDN 模式需要） */
+    function getSupabase() {
+      if (window.supabase && window.supabase.createClient) {
+        return window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+      }
+      return null;
+    }
+
+    /**
+     * 从数据源加载面试记录
+     * 返回 Promise<Array>
+     */
+    async function loadRecords() {
+      // 优先尝试云端
+      if (isLoggedIn()) {
+        try {
+          const client = getSupabase();
+          if (!client) {
+            console.warn('[历史页] Supabase 客户端初始化失败，回退本地数据');
+          } else {
+            const { data: user } = await client.auth.getUser();
+            if (user && user.user) {
+              console.log('[历史页] 已登录用户:', user.user.id);
+              const { data, error } = await client
+                .from('interview_records')
+                .select('*')
+                .eq('user_id', user.user.id)
+                .order('created_at', { ascending: false });
+
+              if (error) {
+                console.error('[历史页] 云端查询失败:', error);
+                throw error;
+              }
+
+              // 云端记录统一处理
+              isCloudMode = true;
+              const records = (data || []).map(function(row) {
+                return {
+                  id: row.id,
+                  date: row.created_at || row.date,
+                  jobName: row.job_name || row.jobName || '',
+                  levelName: row.level_name || row.levelName || '',
+                  typeList: row.type_list || row.typeList || '',
+                  totalScore: typeof row.total_score === 'number' ? row.total_score : (typeof row.totalScore === 'number' ? row.totalScore : 0),
+                  scores: row.scores || {},
+                  report: row.report || null,
+                  qaRecords: row.qa_records || row.qaRecords || null,
+                };
+              });
+
+              console.log('[历史页] 从云端加载了', records.length, '条记录');
+              return records;
+            }
+          }
+        } catch (err) {
+          console.warn('[历史页] 云端加载失败，回退本地数据:', err);
+        }
+      }
+
+      // 回退到本地数据
+      isCloudMode = false;
+      const local = safeGetJSON('interviewHistory');
+      if (Array.isArray(local)) {
+        const records = local.map(function(item, idx) {
+          return {
+            id: item.id || String(idx),
+            date: item.date || '',
+            jobName: item.jobName || '',
+            levelName: item.levelName || '',
+            typeList: item.typeList || '',
+            totalScore: typeof item.totalScore === 'number' ? item.totalScore : 0,
+            scores: item.scores || {},
+            report: item.report || null,
+            qaRecords: item.qaRecords || null,
+          };
+        });
+        console.log('[历史页] 从本地加载了', records.length, '条记录');
+        return records;
+      }
+
+      console.log('[历史页] 无本地数据');
+      return [];
+    }
+
+    // ===========================
+    // 统计卡渲染
+    // ===========================
+
+    function renderStats() {
+      const count = allRecords.length;
+      document.getElementById('stat-count').textContent = count;
+
+      if (count === 0) {
+        document.getElementById('stat-latest').textContent = '—';
+        document.getElementById('stat-best').textContent = '—';
+        document.getElementById('stat-diff').textContent = '—';
+        return;
+      }
+
+      // allRecords 是时间正序，最新在末尾
+      const latestScore = allRecords[count - 1].totalScore;
+      document.getElementById('stat-latest').textContent = latestScore;
+
+      // 最佳得分
+      const bestScore = Math.max.apply(null, allRecords.map(function(r) { return r.totalScore; }));
+      document.getElementById('stat-best').textContent = bestScore;
+
+      // 较上次提升
+      if (count >= 2) {
+        const prevScore = allRecords[count - 2].totalScore;
+        const diff = latestScore - prevScore;
+        const diffStr = (diff >= 0 ? '+' : '') + diff.toFixed(1);
+        const diffEl = document.getElementById('stat-diff');
+        diffEl.textContent = diffStr;
+        // 正提升绿色，下降红色，不变灰色
+        if (diff > 0) {
+          diffEl.className = 'text-2xl font-bold text-green-500';
+        } else if (diff < 0) {
+          diffEl.className = 'text-2xl font-bold text-red-500';
+        } else {
+          diffEl.className = 'text-2xl font-bold text-gray-400';
+        }
+      } else {
+        document.getElementById('stat-diff').textContent = '—';
+      }
+    }
+
+    // ===========================
+    // 图表渲染
+    // ===========================
+
+    function renderCharts() {
+      renderTrendChart();
+      renderDimensionChart();
+    }
+
+    /** 综合得分趋势折线图 */
+    function renderTrendChart() {
+      const canvas = document.getElementById('trend-chart');
+      const ctx = canvas.getContext('2d');
+
+      // 销毁旧实例
+      if (trendChart) { trendChart.destroy(); trendChart = null; }
+
+      // 少于 2 条数据时显示空态
+      if (allRecords.length < 2) {
+        trendChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: ['第1次'],
+            datasets: [{
+              label: '综合得分',
+              data: [null],
+              borderColor: '#D1D5DB',
+              borderDash: [6, 4],
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false },
+            },
+            scales: {
+              y: {
+                min: 0, max: 100,
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { color: '#F3F4F6' },
+              },
+              x: {
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { display: false },
+              }
+            }
+          }
+        });
+
+        // 在图表上方叠加空态提示
+        const wrapper = document.getElementById('trend-chart-wrapper');
+        let overlay = wrapper.querySelector('.empty-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'empty-overlay absolute inset-0 flex items-center justify-center pointer-events-none';
+          overlay.innerHTML = '<p class="text-sm text-gray-400">完成至少 2 场面试后显示趋势</p>';
+          wrapper.style.position = 'relative';
+          wrapper.appendChild(overlay);
+        }
+        return;
+      }
+
+      // 移除空态提示
+      const wrapper = document.getElementById('trend-chart-wrapper');
+      const overlay = wrapper.querySelector('.empty-overlay');
+      if (overlay) overlay.remove();
+
+      // allRecords 时间正序，x 轴从第 1 次开始
+      const labels = allRecords.map(function(_, i) { return '第' + (i + 1) + '次'; });
+      const scores = allRecords.map(function(r) { return r.totalScore; });
+
+      trendChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '综合得分',
+            data: scores,
+            borderColor: '#6366F1',
+            borderWidth: 2.5,
+            pointBackgroundColor: '#6366F1',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            fill: true,
+            backgroundColor: 'rgba(99,102,241,0.1)',
+            tension: 0.3,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1F2937',
+              titleFont: { size: 12 },
+              bodyFont: { size: 12 },
+              cornerRadius: 8,
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  return '得分: ' + context.parsed.y + ' 分';
+                }
+              }
+            },
+          },
+          scales: {
+            y: {
+              min: 0, max: 100,
+              ticks: { color: '#9CA3AF', font: { size: 11 }, stepSize: 20 },
+              grid: { color: '#F3F4F6' },
+            },
+            x: {
+              ticks: { color: '#9CA3AF', font: { size: 11 } },
+              grid: { display: false },
+            }
+          }
+        }
+      });
+    }
+
+    /** 各维度成长对比柱状图 */
+    function renderDimensionChart() {
+      const canvas = document.getElementById('dimension-chart');
+      const ctx = canvas.getContext('2d');
+
+      // 销毁旧实例
+      if (dimChart) { dimChart.destroy(); dimChart = null; }
+
+      // 少于 2 条数据时显示空态
+      if (allRecords.length < 2) {
+        dimChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: dimKeys.map(function(k) { return dimNames[k] || k; }),
+            datasets: [{
+              label: '首次',
+              data: dimKeys.map(function() { return null; }),
+              backgroundColor: '#D1D5DB',
+              borderRadius: 6,
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { enabled: false },
+            },
+            scales: {
+              y: {
+                min: 0, max: 100,
+                ticks: { color: '#9CA3AF', font: { size: 11 } },
+                grid: { color: '#F3F4F6' },
+              },
+              x: {
+                ticks: { color: '#9CA3AF', font: { size: 10 }, maxRotation: 30 },
+                grid: { display: false },
+              }
+            }
+          }
+        });
+
+        // 叠加空态提示
+        const wrapper = document.getElementById('dimension-chart-wrapper');
+        let overlay = wrapper.querySelector('.empty-overlay');
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'empty-overlay absolute inset-0 flex items-center justify-center pointer-events-none';
+          overlay.innerHTML = '<p class="text-sm text-gray-400">完成至少 2 场面试后显示对比</p>';
+          wrapper.style.position = 'relative';
+          wrapper.appendChild(overlay);
+        }
+        return;
+      }
+
+      // 移除空态提示
+      const wrapper = document.getElementById('dimension-chart-wrapper');
+      const overlay = wrapper.querySelector('.empty-overlay');
+      if (overlay) overlay.remove();
+
+      // 首次记录（allRecords[0]）vs 最新记录（allRecords[last]）
+      const first = allRecords[0].scores || {};
+      const latest = allRecords[allRecords.length - 1].scores || {};
+
+      const firstData = dimKeys.map(function(k) {
+        return typeof first[k] === 'number' ? first[k] : 0;
+      });
+      const latestData = dimKeys.map(function(k) {
+        return typeof latest[k] === 'number' ? latest[k] : 0;
+      });
+
+      dimChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: dimKeys.map(function(k) { return dimNames[k] || k; }),
+          datasets: [
+            {
+              label: '首次',
+              data: firstData,
+              backgroundColor: '#D1D5DB',
+              borderRadius: 6,
+              barPercentage: 0.7,
+              categoryPercentage: 0.6,
+            },
+            {
+              label: '最新',
+              data: latestData,
+              backgroundColor: '#6366F1',
+              borderRadius: 6,
+              barPercentage: 0.7,
+              categoryPercentage: 0.6,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              align: 'end',
+              labels: {
+                boxWidth: 12,
+                boxHeight: 12,
+                borderRadius: 3,
+                useBorderRadius: true,
+                color: '#6B7280',
+                font: { size: 11 },
+                padding: 16,
+              }
+            },
+            tooltip: {
+              backgroundColor: '#1F2937',
+              titleFont: { size: 12 },
+              bodyFont: { size: 12 },
+              cornerRadius: 8,
+              padding: 10,
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y + ' 分';
+                }
+              }
+            },
+          },
+          scales: {
+            y: {
+              min: 0, max: 100,
+              ticks: { color: '#9CA3AF', font: { size: 11 }, stepSize: 20 },
+              grid: { color: '#F3F4F6' },
+            },
+            x: {
+              ticks: { color: '#9CA3AF', font: { size: 10 }, maxRotation: 30 },
+              grid: { display: false },
+            }
+          }
+        }
+      });
+    }
+
+    // ===========================
+    // 历史记录列表渲染
+    // ===========================
+
+    function renderRecordList() {
+      const container = document.getElementById('records-list');
+      container.innerHTML = '';
+
+      if (allRecords.length === 0) return;
+
+      // 逆序显示（最新在上）
+      const reversed = allRecords.slice().reverse();
+
+      reversed.forEach(function(record) {
+        const card = document.createElement('div');
+        card.className = 'record-card bg-[#F9FAFB] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 border border-gray-100';
+        card.dataset.id = record.id;
+
+        // 类型标签（最多显示 2 个）
+        const types = record.typeList.split(/[·,，]/).filter(function(t) { return t.trim(); });
+        const maxShow = 2;
+        const typeTags = types.slice(0, maxShow).map(function(t) {
+          return '<span class="inline-block text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">' + t.trim() + '</span>';
+        }).join('');
+        const moreTag = types.length > maxShow ? '<span class="inline-block text-xs text-gray-400">...</span>' : '';
+
+        // 得分颜色
+        const sc = record.totalScore;
+        const color = scoreColor(sc);
+
+        card.innerHTML =
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex items-center gap-2 mb-1">' +
+              '<span class="text-xs text-gray-400">' + formatDate(record.date) + '</span>' +
+            '</div>' +
+            '<p class="text-sm font-semibold text-gray-900 truncate">' + escapeHtml(record.jobName) + ' · ' + escapeHtml(record.levelName) + '</p>' +
+            '<div class="flex items-center gap-1.5 mt-1 flex-wrap">' + typeTags + moreTag + '</div>' +
+          '</div>' +
+          '<div class="flex items-center gap-4 flex-shrink-0">' +
+            '<span class="text-2xl font-bold" style="color:' + color + '">' + sc + '</span>' +
+            '<button class="delete-btn text-gray-400 hover:text-red-500 transition-colors text-lg" title="删除记录" aria-label="删除记录">🗑</button>' +
+            '<a href="javascript:void(0)" class="view-report-btn text-sm text-primary hover:text-indigo-400 transition-colors font-medium whitespace-nowrap">查看报告 →</a>' +
+          '</div>';
+
+        // 绑定删除事件
+        var deleteBtn = card.querySelector('.delete-btn');
+        deleteBtn.addEventListener('click', function() {
+          handleDelete(record);
+        });
+
+        // 绑定查看报告事件
+        var viewBtn = card.querySelector('.view-report-btn');
+        viewBtn.addEventListener('click', function() {
+          handleViewReport(record);
+        });
+
+        container.appendChild(card);
+      });
+    }
+
+    /** HTML 转义 */
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ===========================
+    // 查看报告
+    // ===========================
+
+    function handleViewReport(record) {
+      if (!record.report) {
+        showToast('这条旧记录没有保存详细报告');
+        return;
+      }
+
+      // 按需求存储完整数据到 localStorage
+      var viewData = {
+        report: record.report,
+        qaRecords: record.qaRecords,
+        meta: {
+          jobName: record.jobName,
+          levelName: record.levelName,
+          roundName: record.typeList.split('·')[0].trim(),
+          type: []
+        }
+      };
+      localStorage.setItem('viewHistoryReport', JSON.stringify(viewData));
+      console.log('[历史页] 跳转报告页，记录 id:', record.id);
+      window.location.href = 'report.html';
+    }
+
+    // ===========================
+    // 删除记录
+    // ===========================
+
+    async function handleDelete(record) {
+      var confirmed = await showConfirm(
+        '确认删除',
+        '确定要删除「' + record.jobName + ' · ' + record.levelName + '」这条面试记录吗？此操作不可撤销。'
+      );
+
+      if (!confirmed) return;
+
+      console.log('[历史页] 删除记录 id:', record.id, '云端模式:', isCloudMode);
+
+      try {
+        if (isCloudMode) {
+          // 云端删除
+          var client = getSupabase();
+          if (client) {
+            var { error } = await client
+              .from('interview_records')
+              .delete()
+              .eq('id', record.id);
+            if (error) {
+              console.error('[历史页] 云端删除失败:', error);
+              showToast('删除失败，请重试');
+              return;
+            }
+          }
+        } else {
+          // 本地删除
+          var localArr = safeGetJSON('interviewHistory') || [];
+          // 根据索引或 id 匹配删除
+          var idx = -1;
+          for (var i = 0; i < localArr.length; i++) {
+            if (localArr[i].id === record.id || String(i) === String(record.id)) {
+              idx = i;
+              break;
+            }
+          }
+          if (idx >= 0) {
+            localArr.splice(idx, 1);
+            localStorage.setItem('interviewHistory', JSON.stringify(localArr));
+          }
+        }
+
+        showToast('已删除');
+        // 重新加载和渲染
+        await refreshData();
+
+      } catch (err) {
+        console.error('[历史页] 删除异常:', err);
+        showToast('删除失败，请重试');
+      }
+    }
+
+    // ===========================
+    // 页面状态切换
+    // ===========================
+
+    function showLoading() {
+      document.getElementById('loading-state').classList.remove('hidden');
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('content-area').classList.add('hidden');
+    }
+
+    function showEmpty() {
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('empty-state').classList.remove('hidden');
+      document.getElementById('content-area').classList.add('hidden');
+    }
+
+    function showContent() {
+      document.getElementById('loading-state').classList.add('hidden');
+      document.getElementById('empty-state').classList.add('hidden');
+      document.getElementById('content-area').classList.remove('hidden');
+    }
+
+    // ===========================
+    // 数据刷新（重新加载 + 渲染）
+    // ===========================
+
+    async function refreshData() {
+      showLoading();
+
+      try {
+        var records = await loadRecords();
+        // 按时间正序排列
+        records.sort(function(a, b) {
+          return new Date(a.date) - new Date(b.date);
+        });
+        allRecords = records;
+
+        if (allRecords.length === 0) {
+          showEmpty();
+        } else {
+          showContent();
+          renderStats();
+          renderCharts();
+          renderRecordList();
+        }
+      } catch (err) {
+        console.error('[历史页] 数据加载异常:', err);
+        showToast('加载失败，请刷新页面重试');
+        // 显示空态避免白屏
+        showEmpty();
+      }
+    }
+
+    // ===========================
+    // 页面初始化
+    // ===========================
+
+    (async function init() {
+      console.log('[历史页] 页面初始化');
+      showLoading();
+      await refreshData();
+      console.log('[历史页] 初始化完成，共', allRecords.length, '条记录');
+    })();
+  </script>
+</body>
+</html>
