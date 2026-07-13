@@ -488,7 +488,8 @@
     </div>
     <!-- 视频画面 -->
     <div class="relative bg-black" style="height:220px;">
-      <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover"></video>
+      <video id="local-video" autoplay muted playsinline class="w-full h-full object-cover" style="display:block;"></video>
+      <canvas id="segmentation-canvas" class="w-full h-full object-cover absolute inset-0" style="display:none;"></canvas>
     </div>
     <!-- 效果按钮排 -->
     <div class="bg-gray-900/80 backdrop-blur-md px-2 py-2 flex gap-1 justify-center">
@@ -525,6 +526,7 @@
   <!-- ============================================== -->
   <script src="supabase-config.js"></script>
   <script src="ai-client.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
 
   <script>
     // =============================================
@@ -2279,6 +2281,14 @@ ${model}
     let localVideo = null;
     let videoEffect = 'original';
     let videoAuthDeferred = null;
+    let selfieSegmentation = null;    // MediaPipe 实例
+    let segCanvas = null;             // 输出 canvas
+    let segCtx = null;                // canvas 上下文
+    let segRafId = null;              // 渲染动画帧 ID
+    let segFgCanvas = null;           // 前景临时 canvas（复用，避免每帧创建）
+    let segFgCtx = null;              // 前景临时上下文
+    let segIsLoading = false;         // 模型加载中标志
+    let segLastFrameTime = 0;         // 上一帧时间戳（FPS 限制）
 
     /** 视频模式主入口：弹出授权流程 */
     function videoAuthFlow() {
@@ -2367,6 +2377,8 @@ ${model}
       videoFloatEl = document.getElementById('video-float');
       localVideo = document.getElementById('local-video');
       videoDragBar = document.getElementById('video-drag-bar');
+      segCanvas = document.getElementById('segmentation-canvas');
+      if (segCanvas) segCtx = segCanvas.getContext('2d');
 
       localVideo.srcObject = stream;
       videoFloatEl.classList.remove('hidden');
@@ -2429,40 +2441,13 @@ ${model}
       }
     }
 
-    /** 设置视频效果（纯 CSS 实现，零依赖）
-     *  注意：真正的背景虚化需要 AI 人像分割（如 MediaPipe），纯 CSS 无法区分前景/背景，
-     *  因此"虚化"改为暗角聚焦效果（四周压暗突出人脸中心），其余效果用 CSS filter。
+    /** 设置视频效果
+     *  blur 效果使用 MediaPipe Selfie Segmentation 实现真实背景虚化，
+     *  其余效果继续使用 CSS filter。
      */
     function setVideoEffect(effect) {
       videoEffect = effect;
       if (!localVideo) return;
-
-      // 各效果的 CSS filter 参数
-      const filters = {
-        original: 'none',
-        blur: 'brightness(1.05) contrast(1.05)',           // 暗角聚焦（由 overlay CSS 实现）
-        gradient: 'saturate(1.5) hue-rotate(20deg) contrast(1.08)', // 色彩渐变增强
-        dark: 'brightness(0.6) contrast(1.15)',             // 深色模式
-        beauty: 'brightness(1.1) saturate(1.15) contrast(0.92) blur(0.3px)', // 磨皮美颜
-      };
-      localVideo.style.filter = filters[effect] || 'none';
-
-      // 虚化效果额外添加暗角叠加层（CSS radial-gradient 四周压暗）
-      const container = localVideo.parentElement;
-      let vignette = container.querySelector('.vignette-overlay');
-      if (effect === 'blur') {
-        if (!vignette) {
-          vignette = document.createElement('div');
-          vignette.className = 'vignette-overlay';
-          vignette.style.cssText = 'position:absolute;inset:0;pointer-events:none;border-radius:inherit;' +
-            'background:radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.45) 100%);z-index:1;';
-          container.style.position = 'relative';
-          container.appendChild(vignette);
-        }
-        vignette.style.display = '';
-      } else if (vignette) {
-        vignette.style.display = 'none';
-      }
 
       // 更新按钮高亮
       const btns = videoFloatEl.querySelectorAll('.bg-gray-900\\/80 button');
@@ -2474,6 +2459,154 @@ ${model}
           b.className = 'px-2 py-1 rounded-md text-[11px] text-gray-300 hover:bg-white/10';
         }
       });
+
+      // CSS filter 效果（非 blur 时使用）
+      const filters = {
+        original: 'none',
+        gradient: 'saturate(1.5) hue-rotate(20deg) contrast(1.08)',
+        dark: 'brightness(0.6) contrast(1.15)',
+        beauty: 'brightness(1.1) saturate(1.15) contrast(0.92) blur(0.3px)',
+      };
+
+      if (effect === 'blur') {
+        // 启动 MediaPipe 背景虚化
+        localVideo.style.display = 'none';
+        if (segCanvas) segCanvas.style.display = 'block';
+        startSegmentation();
+      } else {
+        // 停止虚化，恢复原始 video
+        stopSegmentation();
+        localVideo.style.display = 'block';
+        if (segCanvas) segCanvas.style.display = 'none';
+        localVideo.style.filter = filters[effect] || 'none';
+      }
+    }
+
+    /** 初始化并启动 MediaPipe Selfie Segmentation */
+    async function startSegmentation() {
+      if (segIsLoading) return;
+      if (!localVideo || !localVideo.videoWidth) {
+        // video 尚未就绪，稍后再试
+        setTimeout(startSegmentation, 200);
+        return;
+      }
+
+      // 初始化 canvas（只初始化一次）
+      if (!segCanvas) {
+        segCanvas = document.getElementById('segmentation-canvas');
+        segCtx = segCanvas.getContext('2d');
+      }
+      if (!segFgCanvas) {
+        segFgCanvas = document.createElement('canvas');
+        segFgCtx = segFgCanvas.getContext('2d');
+      }
+      // 设置 canvas 尺寸与视频一致
+      const w = localVideo.videoWidth || 640;
+      const h = localVideo.videoHeight || 480;
+      segCanvas.width = w;
+      segCanvas.height = h;
+      segFgCanvas.width = w;
+      segFgCanvas.height = h;
+
+      // 如果模型已初始化，直接启动渲染循环
+      if (selfieSegmentation) {
+        segLastFrameTime = 0;
+        scheduleSegmentFrame();
+        return;
+      }
+
+      // 检查全局 SelfieSegmentation 是否可用
+      if (typeof SelfieSegmentation === 'undefined') {
+        console.warn(LOG, 'MediaPipe SelfieSegmentation 未加载');
+        showSegFallback('当前设备暂不支持背景虚化');
+        return;
+      }
+
+      segIsLoading = true;
+      try {
+        selfieSegmentation = new SelfieSegmentation({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+        });
+        selfieSegmentation.setOptions({
+          modelSelection: 1, // 1 = 高精度模型
+        });
+        selfieSegmentation.onResults(onSegmentationResults);
+        segIsLoading = false;
+        segLastFrameTime = 0;
+        scheduleSegmentFrame();
+      } catch (err) {
+        console.error(LOG, 'MediaPipe 初始化失败:', err);
+        segIsLoading = false;
+        showSegFallback('当前设备暂不支持背景虚化');
+      }
+    }
+
+    /** 停止 segmentation 渲染 */
+    function stopSegmentation() {
+      if (segRafId) {
+        cancelAnimationFrame(segRafId);
+        segRafId = null;
+      }
+    }
+
+    /** 按约 15-20 FPS 调度下一帧 */
+    function scheduleSegmentFrame() {
+      if (videoEffect !== 'blur' || !selfieSegmentation) return;
+      segRafId = requestAnimationFrame(async (time) => {
+        if (videoEffect !== 'blur') return;
+        // 限制 FPS：约 50-66ms 一帧（15-20 FPS）
+        if (time - segLastFrameTime < 55) {
+          scheduleSegmentFrame();
+          return;
+        }
+        segLastFrameTime = time;
+        try {
+          await selfieSegmentation.send({ image: localVideo });
+        } catch (e) {
+          console.warn(LOG, 'Segmentation send 失败:', e);
+        }
+        // 继续下一帧（如果效果仍是 blur）
+        if (videoEffect === 'blur') scheduleSegmentFrame();
+      });
+    }
+
+    /** MediaPipe 分割结果回调 */
+    function onSegmentationResults(results) {
+      if (videoEffect !== 'blur' || !segCtx || !segCanvas) return;
+      const w = segCanvas.width;
+      const h = segCanvas.height;
+
+      // 步骤 1：画模糊背景到主 canvas
+      segCtx.clearRect(0, 0, w, h);
+      segCtx.save();
+      segCtx.filter = 'blur(16px)';
+      segCtx.drawImage(results.image, 0, 0, w, h);
+      segCtx.restore();
+
+      // 步骤 2：在临时 canvas 上画清晰前景
+      segFgCtx.clearRect(0, 0, w, h);
+      segFgCtx.drawImage(results.image, 0, 0, w, h);
+      // 用 segmentation mask 裁剪，只保留前景（白色区域）
+      segFgCtx.globalCompositeOperation = 'destination-in';
+      segFgCtx.drawImage(results.segmentationMask, 0, 0, w, h);
+      segFgCtx.globalCompositeOperation = 'source-over';
+
+      // 步骤 3：把清晰前景叠加到主 canvas
+      segCtx.drawImage(segFgCanvas, 0, 0, w, h);
+    }
+
+    /** 虚化降级：恢复原始画面并显示提示 */
+    function showSegFallback(msg) {
+      stopSegmentation();
+      if (localVideo) {
+        localVideo.style.display = 'block';
+        localVideo.style.filter = 'none';
+      }
+      if (segCanvas) segCanvas.style.display = 'none';
+      // 更新按钮状态回原始
+      setVideoEffect('original');
+      // 显示提示（用 toast 或 alert，这里用 alert 简单可靠）
+      setTimeout(() => alert(msg), 100);
     }
 
     /** 显示出镜预览卡片 */
@@ -2528,6 +2661,12 @@ ${model}
 
     /** 清理视频资源 */
     function cleanupVideo() {
+      // 停止 segmentation
+      stopSegmentation();
+      if (selfieSegmentation) {
+        try { selfieSegmentation.close(); } catch(e) {}
+        selfieSegmentation = null;
+      }
       if (mediaStream) {
         mediaStream.getTracks().forEach(t => t.stop());
         mediaStream = null;
@@ -2535,9 +2674,15 @@ ${model}
       if (localVideo) {
         localVideo.srcObject = null;
         localVideo.poster = '';
+        localVideo.style.display = 'block';
+        localVideo.style.filter = 'none';
+      }
+      if (segCanvas) {
+        segCanvas.style.display = 'none';
+        segCanvas.width = 0;
+        segCanvas.height = 0;
       }
       if (videoFloatEl) videoFloatEl.classList.add('hidden');
-      // 冻结画面：取最后一帧作为 poster（简化处理：不设置 poster，直接清空）
     }
 
     /** 通用的授权后开始面试 */
