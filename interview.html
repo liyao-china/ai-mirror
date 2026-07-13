@@ -1122,18 +1122,9 @@ ${model}
         // 根据 cfg.input 初始化交互区显示
         initInputArea();
 
-        // 打字机显示开场白
-        typewriterAbort = false;
-        $subtitleCard().classList.remove('hidden');
-        $subtitleText().textContent = '';
-
-        // 语音/视频模式下后台播报开场白（TTS 与打字机并行，不阻塞状态切换）
-        if (cfg.input === 'voice' || cfg.input === 'video') {
-          speakQuestion(openingText).catch(e => console.warn(LOG, '开场白 TTS 失败:', e));
-        }
-
-        typewriter(openingText, $subtitleText(), 26).then(() => {
-          // push 进 messages 作为 assistant 消息，末尾带 [STATUS:CONTINUE]
+        // 统一呈现开场白
+        presentQuestion(openingText).then(() => {
+          // push 进 messages
           messages.push({ role: 'assistant', content: openingText + '\n[STATUS:CONTINUE]' });
 
           // 切换到等待回答状态
@@ -1144,7 +1135,7 @@ ${model}
           startTimer();
         }).catch(err => {
           console.error(LOG, '开场白出错:', err);
-          // 出错时直接显示完整文本并继续，不卡死
+          // 兜底：直接显示完整文本并继续
           $subtitleText().textContent = openingText;
           messages.push({ role: 'assistant', content: openingText + '\n[STATUS:CONTINUE]' });
           currentQuestionText = openingText;
@@ -1179,6 +1170,13 @@ ${model}
     // 提交回答
     // =============================================
     function submitAnswer(voiceText) {
+      // 防重入
+      if (isProcessingAnswer) {
+        console.warn(LOG, '正在处理中，忽略重复提交');
+        return;
+      }
+      isProcessingAnswer = true;
+
       // 语音模式传入识别文本，文字模式从输入框读取
       const text = (typeof voiceText === 'string' && voiceText.trim())
         ? voiceText.trim()
@@ -1186,7 +1184,7 @@ ${model}
 
       // 空文本拦截
       if (!text) {
-        // 状态短语闪橙色 2 秒
+        isProcessingAnswer = false;
         $statusPhrase().textContent = '还没有检测到回答内容';
         $statusPhrase().style.color = '#F59E0B';
         setTimeout(() => {
@@ -1221,12 +1219,14 @@ ${model}
 
       // 判断是否达到总题数
       if (qaRecords.length >= TOTAL_QUESTIONS) {
+        isProcessingAnswer = false;
         finishInterview(false);
         return;
       }
 
       // 请求下一个问题
       askNextQuestion();
+      isProcessingAnswer = false;
     }
 
     // =============================================
@@ -1261,19 +1261,14 @@ ${model}
 
         console.log(LOG, '提取状态:', status, '题目:', questionText.substring(0, 100) + '...');
 
-        // 打字机显示题目
-        typewriterAbort = false;
-        setAvatarState('speaking');
-        $subtitleCard().classList.remove('hidden');
-        $subtitleText().textContent = '';
-
-        // 状态切换到说话中
-        setState(STATE.SPEAKING, '面试官说话中', '');
-
-        await typewriter(questionText, $subtitleText(), 26);
-
-        // TTS 语音播报（仅语音/视频模式有效，与打字机并行）
-        speakQuestion(questionText);
+        // 统一呈现问题（打字机或语音同步字幕）
+        try {
+          await presentQuestion(questionText);
+        } catch (err) {
+          console.error(LOG, '问题呈现失败:', err);
+          // 兜底：直接显示完整文本
+          $subtitleText().textContent = questionText;
+        }
 
         // 根据 STATUS 决定后续
         if (status === 'END') {
@@ -1389,6 +1384,168 @@ ${model}
       if (typewriterAbort) {
         element.textContent = text;
       }
+    }
+
+    // =============================================
+    // 统一问题呈现：字幕严格跟随声音
+    // =============================================
+    /**
+     * 统一呈现面试官问题。
+     * 文字模式：普通打字机效果。
+     * 语音/视频模式：单 TTS 调用 → audio.play() → RAF 根据音频进度逐字显示字幕。
+     */
+    async function presentQuestion(text) {
+      // 文字模式：普通打字机
+      if (cfg.input === 'text') {
+        $subtitleCard().classList.remove('hidden');
+        $subtitleText().textContent = '';
+        typewriterAbort = false;
+        await typewriter(text, $subtitleText(), 26);
+        return;
+      }
+
+      // 语音/视频模式
+      const voice = voiceByRound[cfg.round] || 'Ethan';
+      setAvatarState('speaking');
+      updateStatusCapsule('面试官正在提问', '正在生成语音…');
+      $subtitleCard().classList.remove('hidden');
+      $subtitleText().textContent = '';
+
+      let audio = null;
+      let rafId = null;
+      let resolved = false;
+
+      const cleanup = () => {
+        if (rafId) cancelAnimationFrame(rafId);
+        if (audio) {
+          audio.pause();
+          audio.onended = null;
+          audio.onerror = null;
+          audio.oncanplay = null;
+          audio = null;
+        }
+      };
+
+      return new Promise(async (resolve, reject) => {
+        const doResolve = () => {
+          if (resolved) return;
+          resolved = true;
+          cleanup();
+          resolve();
+        };
+
+        try {
+          // 只调用一次 TTS
+          const url = await Promise.race([
+            AIProxy.tts(text, voice),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('TTS 超时')), 15000))
+          ]);
+
+          if (typewriterAbort) { // 被用户打断
+            doResolve();
+            return;
+          }
+
+          audio = new Audio(url);
+
+          audio.onerror = () => {
+            console.warn(LOG, '音频加载失败，降级浏览器 TTS');
+            doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
+          };
+
+          audio.oncanplay = () => {
+            if (resolved) return;
+            audio.play().catch(err => {
+              console.warn(LOG, '音频播放失败:', err);
+              doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
+            });
+          };
+
+          audio.onplay = () => {
+            if (resolved) return;
+            updateStatusCapsule('面试官正在提问', '语音播报中');
+            // RAF 根据音频进度逐字显示字幕
+            const totalChars = text.length;
+            const tick = () => {
+              if (!audio || resolved) return;
+              if (audio.paused && audio.currentTime === 0) {
+                rafId = requestAnimationFrame(tick);
+                return;
+              }
+              const progress = audio.duration ? Math.min(1, audio.currentTime / audio.duration) : 0;
+              const charCount = Math.floor(progress * totalChars);
+              $subtitleText().textContent = text.substring(0, charCount);
+              if (audio.ended || audio.paused && audio.currentTime > 0 && audio.currentTime >= audio.duration - 0.05) {
+                $subtitleText().textContent = text; // 补全
+                doResolve();
+                return;
+              }
+              rafId = requestAnimationFrame(tick);
+            };
+            rafId = requestAnimationFrame(tick);
+          };
+
+          audio.onended = () => {
+            if (!resolved) {
+              $subtitleText().textContent = text;
+              doResolve();
+            }
+          };
+
+          // 兜底：如果音频 500ms 内没有触发任何事件，直接降级
+          setTimeout(() => {
+            if (!resolved && audio && audio.readyState < 2) {
+              console.warn(LOG, '音频长时间未就绪，降级浏览器 TTS');
+              doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
+            }
+          }, 500);
+
+        } catch (err) {
+          console.warn(LOG, 'TTS 请求失败:', err);
+          doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
+        }
+      });
+    }
+
+    /** 浏览器 speechSynthesis 兜底播报 */
+    async function doBrowserTTSFallback(text) {
+      return new Promise((resolve) => {
+        if (!window.speechSynthesis) {
+          // 直接完整显示文字
+          $subtitleText().textContent = text;
+          resolve();
+          return;
+        }
+
+        ttsFallbackUsed = true;
+        forceShowSubtitle();
+
+        // 显示一次性黄色提示条
+        const tipEl = document.getElementById('tts-fallback-tip');
+        if (!tipEl.classList.contains('shown')) {
+          tipEl.classList.remove('hidden');
+          tipEl.classList.add('shown');
+          setTimeout(() => { tipEl.classList.add('hidden'); }, 5000);
+        }
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'zh-CN';
+        utterance.rate = 0.9;
+
+        const voices = speechSynthesis.getVoices();
+        const zhVoice = voices.find(v =>
+          v.name.includes('Xiaoxiao') || v.name.includes('晓晓') ||
+          v.name.includes('Ting-Ting') || (v.name.includes('Google') && v.lang.includes('zh'))
+        ) || voices.find(v => v.lang.startsWith('zh'));
+        if (zhVoice) utterance.voice = zhVoice;
+
+        // 浏览器 TTS 期间同步显示文字（简化：直接完整显示）
+        $subtitleText().textContent = text;
+
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        speechSynthesis.speak(utterance);
+      });
     }
 
     // =============================================
@@ -1662,147 +1819,26 @@ ${model}
     // 模块 T：TTS 语音播报
     // =============================================
     const voiceByRound = { mentor: 'Ethan', leader: 'Serena', director: 'Ethan', hr: 'Chelsie' };
-    let ttsSequenceId = 0;           // 递增序列号，用于中断旧播报
     let ttsAudio = null;             // 当前播放的 Audio 对象
     let ttsFallbackUsed = false;     // 是否已使用过浏览器兜底
-
-    /** 中文标点切自然句 */
-    function cutSentences(text) {
-      // 按 。！？； 切割，不足 6 字的短句并入上一句
-      const parts = text.split(/([。！？；])/);
-      const sentences = [];
-      let buffer = '';
-      for (let i = 0; i < parts.length; i++) {
-        if (/[。！？；]/.test(parts[i])) {
-          buffer += parts[i];
-          sentences.push(buffer.trim());
-          buffer = '';
-        } else {
-          if (buffer.length > 0) buffer += parts[i];
-          else buffer = parts[i];
-        }
-      }
-      if (buffer.trim()) sentences.push(buffer.trim());
-      // 合并短句（<6字并入上一句）
-      const merged = [];
-      for (const s of sentences) {
-        if (merged.length > 0 && s.length < 6) {
-          merged[merged.length - 1] += s;
-        } else {
-          merged.push(s);
-        }
-      }
-      return merged;
-    }
-
-    /** 主入口：语音播报题目（仅语音/视频模式有效） */
-    async function speakQuestion(text) {
-      if (cfg.input === 'text') return; // 文字模式不播报
-      ttsSequenceId++;
-      const mySeq = ttsSequenceId;
-
-      const voice = voiceByRound[cfg.round] || 'Ethan';
-      const sentences = cutSentences(text);
-
-      setAvatarState('speaking');
-      updateStatusCapsule('面试官正在提问', '语音播报中');
-
-      let allFailed = true;
-
-      for (let i = 0; i < sentences.length; i++) {
-        if (ttsSequenceId !== mySeq) return; // 已被新播报取代
-
-        // 预取下一句（不 await，提前发起请求）
-        if (i + 1 < sentences.length) {
-          const nextIdx = i + 1;
-          AIProxy.tts(sentences[nextIdx], voice).catch(() => {});
-        }
-
-        try {
-          // 6.5s 超时保护
-          const url = await Promise.race([
-            AIProxy.tts(sentences[i], voice),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6500))
-          ]);
-          if (ttsSequenceId !== mySeq) return;
-          allFailed = false;
-
-          ttsAudio = new Audio(url);
-          ttsAudio.onended = () => {};
-          ttsAudio.play().catch(() => {});
-          // 等播放完再继续下一句
-          await new Promise(resolve => {
-            ttsAudio.onended = resolve;
-            ttsAudio.onerror = resolve;
-          });
-        } catch (e) {
-          // 该句 TTS 失败，跳过继续下一句
-        }
-      }
-
-      if (allFailed && ttsSequenceId === mySeq) {
-        // 全部云端 TTS 失败，使用浏览器 speechSynthesis 兜底
-        fallbackBrowserTTS(text, mySeq);
-      }
-    }
-
-    /** 浏览器 speechSynthesis 兜底播报 */
-    function fallbackBrowserTTS(text, seqId) {
-      if (ttsSequenceId !== seqId) return;
-      ttsFallbackUsed = true;
-      forceShowSubtitle();
-
-      // 显示一次性黄色提示条（5 秒后自动消失）
-      const tipEl = document.getElementById('tts-fallback-tip');
-      if (!tipEl.classList.contains('shown')) {
-        tipEl.classList.remove('hidden');
-        tipEl.classList.add('shown');
-        setTimeout(() => {
-          tipEl.classList.add('hidden');
-        }, 5000);
-      }
-
-      if (!window.speechSynthesis) {
-        // 浏览器不支持语音合成，直接结束播报状态
-        if (ttsSequenceId === seqId && currentState === STATE.SPEAKING) {
-          setAvatarState('idle');
-          updateStatusCapsule('轮到你回答', '');
-        }
-        return;
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'zh-CN';
-      utterance.rate = 0.9;
-
-      // 尝试选择中文音色
-      const voices = speechSynthesis.getVoices();
-      const zhVoice = voices.find(v =>
-        v.name.includes('Xiaoxiao') || v.name.includes('晓晓') ||
-        v.name.includes('Ting-Ting') || (v.name.includes('Google') && v.lang.includes('zh'))
-      ) || voices.find(v => v.lang.startsWith('zh'));
-      if (zhVoice) utterance.voice = zhVoice;
-
-      utterance.onend = () => {
-        if (ttsSequenceId === seqId && currentState === STATE.SPEAKING) {
-          setAvatarState('idle');
-          updateStatusCapsule('轮到你回答', '');
-        }
-      };
-      speechSynthesis.speak(utterance);
-    }
 
     /** 强制显示字幕卡（兜底时确保用户能看到文字） */
     function forceShowSubtitle() {
       document.getElementById('subtitle-card').classList.remove('hidden');
     }
 
-    /** 立即停止所有播报 */
+    /** 停止语音播报 */
     function stopSpeaking() {
-      ttsSequenceId++; // 使正在进行的播报序列失效
-      if (ttsAudio) { ttsAudio.pause(); ttsAudio.src = ''; ttsAudio = null; }
-      if (window.speechSynthesis) speechSynthesis.cancel();
-      setAvatarState('idle');
+      typewriterAbort = true;
+      // 停止音频播放
+      if (ttsAudio) {
+        ttsAudio.pause();
+        ttsAudio = null;
+      }
+      // 停止浏览器 speechSynthesis
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
     }
 
     /** 更新状态胶囊的辅助函数 */
@@ -1813,24 +1849,22 @@ ${model}
     }
 
     // =============================================
-    // 模块 A：ASR 语音作答
+    // 模块 A：ASR 语音作答（根因重构版）
     // =============================================
-    let mediaStream = null;          // getUserMedia 流（视频模式复用）
+    let mediaStream = null;          // getUserMedia 流
     let mediaRecorder = null;        // MediaRecorder 实例
-    let asrSegments = [];            // [{index, blob, result}]
-    let currentSegmentIndex = 0;     // 当前分段索引
-    let segmentTimer = null;         // 12 秒分段定时器
+    let audioChunks = [];            // 整段录音数据块（新）
     let audioContext = null;         // Web Audio 上下文
     let analyserNode = null;         // 频谱分析节点
-    let spectrumAnimId = null;        // 频谱动画帧 ID
-    let speechRecognition = null;     // 浏览器实时识别实例
-    let browserInterimText = '';      // 浏览器实时识别中间文本
-    let finalTranscript = '';         // 最终转录文本
-    let isRecording = false;          // 是否正在录音
-    let silenceTimer = null;          // 静音检测定时器
-    let subtitleVisible = true;       // 字幕是否可见
+    let spectrumAnimId = null;       // 频谱动画帧 ID
+    let speechRecognition = null;    // 浏览器实时识别实例
+    let browserInterimText = '';     // 浏览器实时识别中间文本
+    let isRecording = false;         // 是否正在录音
+    let hasSpoken = false;           // 本次录音中是否检测到过有效音量（新）
+    let isProcessingAnswer = false;  // 防重入：录音→识别→提交期间禁止重复触发（新）
+    let subtitleVisible = true;      // 字幕是否可见
 
-    /** 获取当前轮次对应的岗位名和级别名（辅助变量） */
+    /** 获取当前轮次对应的岗位名和级别名 */
     function getJobName() { return jobNames[cfg.job] || cfg.job; }
     function getLevelName() { return levelNames[cfg.level] || cfg.level; }
 
@@ -1842,20 +1876,25 @@ ${model}
 
     /** 开始录音 */
     async function startRecording() {
+      // 防重入
+      if (isProcessingAnswer) {
+        console.warn(LOG, '正在处理上一段回答，请勿重复点击');
+        return;
+      }
       stopSpeaking(); // 打断面试官播报
       setAvatarState('listening');
       updateStatusCapsule('正在听你回答', '录音中');
 
       isRecording = true;
-      finalTranscript = '';
-      asrSegments = [];
-      currentSegmentIndex = 0;
+      hasSpoken = false;
+      audioChunks = [];
       browserInterimText = '';
 
-      // UI 更新：切换为录音状态
+      // UI 更新
       const micBtn = document.getElementById('mic-btn');
       micBtn.innerHTML = '⏹';
       micBtn.classList.add('recording');
+      micBtn.disabled = false; // 确保可用
       document.getElementById('ripple-1').classList.add('animate');
       document.getElementById('ripple-2').classList.add('animate');
       document.getElementById('spectrum-canvas').classList.remove('hidden');
@@ -1875,61 +1914,47 @@ ${model}
         source.connect(analyserNode);
         drawSpectrum();
 
-        // MediaRecorder 初始化
+        // MediaRecorder：整段录音，1000ms timeslice 定期收集数据
         const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
           .find(t => MediaRecorder.isTypeSupported(t)) || '';
         mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : {});
 
         mediaRecorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
-            const blob = e.data;
-            const idx = currentSegmentIndex;
-            currentSegmentIndex++;
-            asrSegments.push({ index: idx, blob, result: null });
-            processSegment(idx, blob);
+            audioChunks.push(e.data);
           }
         };
 
-        // 传 12000ms timeslice：确保每 12 秒自动触发 ondataavailable，
-        // 同时解决部分浏览器（Safari）stop() 后不触发 ondataavailable 的兼容问题
-        mediaRecorder.start(12000);
-
-        // 12 秒分段（重启录音以重置 timeslice 计时）
-        segmentTimer = setInterval(() => {
-          if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            setTimeout(() => {
-              if (mediaRecorder && isRecording) {
-                try { mediaRecorder.start(12000); } catch(e) {}
-              }
-            }, 100);
-          }
-        }, 12000);
-
-        // 静音自动停止：连续 2.5 秒音量低于阈值则自动结束录音
+        // 静音检测：只有检测到有效音量后才开始计数静音
         let silenceCount = 0;
-        silenceTimer = setInterval(() => {
-          if (!isRecording || !analyserNode) { clearInterval(silenceTimer); return; }
+        const silenceCheck = setInterval(() => {
+          if (!isRecording || !analyserNode) { clearInterval(silenceCheck); return; }
           const data = new Uint8Array(analyserNode.frequencyBinCount);
           analyserNode.getByteFrequencyData(data);
           const avg = data.reduce((a, b) => a + b, 0) / data.length;
-          if (avg < 8) {
+          if (avg >= 8) {
+            hasSpoken = true;
+            silenceCount = 0;
+          } else if (hasSpoken) {
             silenceCount++;
             if (silenceCount >= 5) { // 5 × 500ms = 2.5 秒
               clearInterval(silenceCheck);
               console.log(LOG, '检测到静音，自动停止录音');
               stopRecording();
             }
-          } else {
-            silenceCount = 0;
           }
         }, 500);
+
+        // 在 mediaRecorder.onstop 中清理静音检测定时器
+        mediaRecorder._silenceCheck = silenceCheck;
+
+        mediaRecorder.start(1000);
 
         // 启动浏览器实时识别（可选增强）
         initSpeechRecognition();
 
       } catch (err) {
-        console.error('[面试页] 录音启动失败:', err);
+        console.error(LOG, '录音启动失败:', err);
         stopRecording();
         showDeviceError(err);
       }
@@ -1940,25 +1965,21 @@ ${model}
       if (!isRecording) return;
       isRecording = false;
 
-      // 清理静音检测定时器
-      if (silenceTimer) { clearInterval(silenceTimer); silenceTimer = null; }
+      // 清理静音检测
+      if (mediaRecorder && mediaRecorder._silenceCheck) {
+        clearInterval(mediaRecorder._silenceCheck);
+        mediaRecorder._silenceCheck = null;
+      }
 
-      // UI 恢复
+      // UI：立即显示识别状态，禁用麦克风防止重复提交
       const micBtn = document.getElementById('mic-btn');
       micBtn.innerHTML = '🎙️';
       micBtn.classList.remove('recording');
+      micBtn.disabled = true; // 禁用直到识别完成
       document.getElementById('ripple-1').classList.remove('animate');
       document.getElementById('ripple-2').classList.remove('animate');
       document.getElementById('spectrum-canvas').classList.add('hidden');
-
-      // 停止录音定时器
-      clearInterval(segmentTimer);
-      segmentTimer = null;
-
-      // 停止 MediaRecorder
-      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-        mediaRecorder.stop();
-      }
+      updateStatusCapsule('正在识别你的回答…', '请稍候');
 
       // 停止频谱动画
       if (spectrumAnimId) { cancelAnimationFrame(spectrumAnimId); spectrumAnimId = null; }
@@ -1969,32 +1990,99 @@ ${model}
         try { speechRecognition.stop(); } catch(e) {}
         speechRecognition = null;
       }
-
-      // 隐藏实时转录气泡
       document.getElementById('interim-bubble').classList.add('hidden');
 
-      // 等最后一段 ASR 处理完
-      await new Promise(r => setTimeout(r, 500));
+      // 必须等待 MediaRecorder 真正停止并收集完最后一段数据
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        await new Promise(resolve => {
+          mediaRecorder.onstop = resolve;
+          mediaRecorder.stop();
+        });
+      }
 
-      // 优先级瀑布提交
-      submitVoiceAnswer();
+      // 合并完整 Blob
+      const mimeType = mediaRecorder && mediaRecorder.mimeType ? mediaRecorder.mimeType : 'audio/webm';
+      const fullBlob = audioChunks.length > 0
+        ? new Blob(audioChunks, { type: mimeType })
+        : null;
+      audioChunks = [];
+      mediaRecorder = null;
+
+      // 提交识别
+      await submitVoiceAnswer(fullBlob);
     }
 
-    /** 处理单个分段 ASR */
-    async function processSegment(idx, blob) {
+    /** 提交语音回答（整段识别） */
+    async function submitVoiceAnswer(blob) {
+      if (isProcessingAnswer) return;
+      isProcessingAnswer = true;
+
+      let text = '';
+
       try {
+        if (!blob || blob.size === 0) {
+          throw new Error('没有录音数据');
+        }
+
+        console.log(LOG, '开始 ASR 识别，录音大小:', blob.size);
         const dataUrl = await blobToDataURL(blob);
         const context = buildAsrContext();
+
         const result = await Promise.race([
           AIProxy.asr(dataUrl, context),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 12000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('ASR 超时')), 30000))
         ]);
-        const seg = asrSegments.find(s => s.index === idx);
-        if (seg) seg.result = result || '';
-        updateInterimBubble();
-      } catch (e) {
-        console.warn('[面试页] 分段ASR失败:', idx, e);
+
+        text = (result && result.text) || '';
+
+        if (!text) {
+          // 云端 ASR 未返回内容，回退浏览器实时识别文本
+          text = browserInterimText.trim();
+          if (!text) throw new Error('云端 ASR 未识别到内容');
+          console.log(LOG, '云端 ASR 为空，回退浏览器识别文本');
+        }
+
+        // 简单纠错
+        const corrected = await postCorrection(text);
+        text = corrected || text;
+
+        console.log(LOG, 'ASR 识别成功:', text.substring(0, 50));
+        submitAnswer(text);
+
+      } catch (err) {
+        console.error(LOG, '语音回答处理失败:', err);
+
+        // 回退浏览器实时识别文本
+        text = browserInterimText.trim();
+        if (text) {
+          console.log(LOG, '回退浏览器识别文本:', text.substring(0, 50));
+          submitAnswer(text);
+          return; // isProcessingAnswer 在 submitAnswer 中或最后统一清理
+        }
+
+        // 彻底失败：在 mic-area 内显示可见错误控件
+        showAsrError();
+      } finally {
+        isProcessingAnswer = false;
+        // 恢复麦克风按钮
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) micBtn.disabled = false;
       }
+    }
+
+    /** 在 mic-area 内显示 ASR 错误（可见，不放在 hidden 父容器中） */
+    function showAsrError() {
+      updateStatusCapsule('未识别到内容', '请重试');
+      const retryBubble = document.getElementById('asr-retry-bubble');
+      retryBubble.innerHTML = `
+        <div class="text-sm text-gray-600 mb-2">没有识别到你的回答，你可以选择：</div>
+        <div class="flex gap-2">
+          <button onclick="startRecording()" class="px-3 py-1.5 bg-indigo-500 text-white rounded-lg text-sm hover:bg-indigo-600">🎙️ 重新录音</button>
+          <button onclick="switchToTextMode()" class="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm hover:bg-gray-300">⌨️ 改用文字</button>
+        </div>
+      `;
+      retryBubble.classList.remove('hidden');
+      setAvatarState('idle');
     }
 
     /** 构建 ASR 热词上下文 */
@@ -2077,91 +2165,11 @@ ${model}
 
     /** 更新实时转录气泡 */
     function updateInterimBubble() {
-      // 拼接已完成的云端分段
-      const completedSegments = asrSegments
-        .filter(s => s.result !== null)
-        .sort((a, b) => a.index - b.index);
-      const cloudText = joinSegments(completedSegments);
-
-      const display = cloudText || browserInterimText || '';
+      const display = browserInterimText || '';
       document.getElementById('interim-text').textContent = display || '识别中...';
-
       if (display && isRecording) {
         document.getElementById('interim-bubble').classList.remove('hidden');
       }
-    }
-
-    /** 分段拼接 + LCS 去重 */
-    function joinSegments(segments) {
-      if (!segments.length) return '';
-      let text = segments[0].result || '';
-      for (let i = 1; i < segments.length; i++) {
-        const seg = segments[i].result || '';
-        if (!seg) continue;
-        // 最长 10 字公共子串去重
-        const overlap = longestCommonSubstring(text.slice(-10), seg.slice(0, 10));
-        if (overlap) {
-          text += seg.slice(overlap.length);
-        } else {
-          text += seg;
-        }
-      }
-      return text;
-    }
-
-    /** 找最长公共子串（最大 10 字） */
-    function longestCommonSubstring(a, b) {
-      let best = '';
-      for (let len = Math.min(a.length, b.length, 10); len >= 1; len--) {
-        for (let i = 0; i <= a.length - len; i++) {
-          const sub = a.substring(i, i + len);
-          if (b.includes(sub)) return sub;
-        }
-      }
-      return '';
-    }
-
-    /** 提交语音答案（优先级瀑布） */
-    async function submitVoiceAnswer() {
-      updateStatusCapsule('正在整理回答', '识别中');
-
-      // ① 云端分段拼接（最高优先级）
-      const completedSegments = asrSegments
-        .filter(s => s.result !== null)
-        .sort((a, b) => a.index - b.index);
-      let text = joinSegments(completedSegments);
-
-      // ② 浏览器实时识别（备选）
-      if (!text) text = browserInterimText.trim();
-
-      // ③ 整段兜底（把所有分段合成一个 blob 重新识别）
-      if (!text && asrSegments.length > 0) {
-        try {
-          const sorted = asrSegments.sort((a, b) => a.index - b.index);
-          const allBlobs = sorted.map(s => s.blob);
-          const fullBlob = new Blob(allBlobs, { type: sorted[0].blob.type || 'audio/webm' });
-          const dataUrl = await blobToDataURL(fullBlob);
-          text = await Promise.race([
-            AIProxy.asr(dataUrl, buildAsrContext()),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 6000))
-          ]);
-        } catch (e) {
-          console.warn('[面试页] 整段兜底ASR失败:', e);
-        }
-      }
-
-      // ④ 全空：显示重试气泡
-      if (!text || !text.trim()) {
-        document.getElementById('asr-retry-bubble').classList.remove('hidden');
-        updateStatusCapsule('等待你的回答', '识别失败');
-        return;
-      }
-
-      // AI 纠错（3 秒不阻塞，失败则使用原文）
-      text = text.trim();
-      postCorrection(text).then(corrected => {
-        submitAnswer(corrected || text);
-      }).catch(() => submitAnswer(text));
     }
 
     /** AI 纠错（同音字、分词、标点修正） */
@@ -2188,12 +2196,16 @@ ${model}
     function switchToTextMode() {
       if (isRecording) stopRecording();
       cfg.input = 'text';
+      document.getElementById('asr-retry-bubble').classList.add('hidden');
       document.getElementById('mic-area').classList.add('hidden');
       document.getElementById('text-area').classList.remove('hidden');
       document.getElementById('switch-to-voice-btn').classList.add('hidden');
       document.getElementById('subtitle-toggle').classList.add('hidden');
       updateConfigLabel();
       enableInput();
+      $answerInput().focus();
+      setAvatarState('idle');
+      updateStatusCapsule('请文字回答', '输入框已启用');
     }
 
     /** 切换到语音模式 */
