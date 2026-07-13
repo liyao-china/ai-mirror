@@ -169,7 +169,12 @@
       border-color: #86EFAC;
       color: #16A34A;
     }
+
+    /* driver.js 引导样式覆盖 */
+    .driver-popover { border-radius: 16px !important; }
+    .driver-active-element { box-shadow: 0 0 0 3px rgba(99,102,241,0.25) !important; }
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.css"/>
 </head>
 <body class="bg-[#F9FAFB] min-h-screen flex flex-col font-sans text-[#111827]">
 
@@ -1301,6 +1306,24 @@
 
       console.log('[配置页] 页面初始化完成');
     })();
+  </script>
+
+  <!-- driver.js + 引导初始化 -->
+  <script src="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.js.iife.js"></script>
+  <script src="guide.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      Guide.registerPage('setup', [
+        { element: '#job-grid', popover: { title: '选择目标岗位', description: '告诉面试官你要面什么岗，系统会围绕该岗位出题。', side: 'bottom', align: 'start' } },
+        { element: '#level-grid', popover: { title: '选择职级', description: '实习、校招、初级到专家，难度和深度会随之调整。', side: 'bottom', align: 'start' } },
+        { element: '#rounds-grid', popover: { title: '面试官人设', description: 'Mentor、Leader、总监、HR，不同轮次提问风格不同。', side: 'bottom', align: 'start' } },
+        { element: '#type-grid', popover: { title: '面试类型与题型', description: '行为面、技术面、项目深度面、压力面等自由组合。', side: 'bottom', align: 'start' } },
+        { element: '#input-grid', popover: { title: '作答方式', description: '支持打字输入，也可以开麦克风语音作答，甚至开摄像头视频面试。', side: 'bottom', align: 'start' } },
+        { element: '#resume-source, #jd-section', popover: { title: '简历与 JD', description: '如果之前在完善简历页已填写，这里会自动带入；也可以现场补充。', side: 'top', align: 'start' } },
+        { element: '#btn-start', popover: { title: '开始面试', description: '所有选项确认无误后，从这里正式进入面试房间。', side: 'top', align: 'center' } },
+      ]);
+      Guide.init('setup');
+    });
   </script>
 </body>
 </html>

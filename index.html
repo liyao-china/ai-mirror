@@ -205,7 +205,12 @@
       .bar-fill { transition: none; }
       .step-num::after { animation: none; }
     }
+
+    /* ===== driver.js 引导样式覆盖 ===== */
+    .driver-popover { border-radius: 16px !important; }
+    .driver-active-element { box-shadow: 0 0 0 3px rgba(99,102,241,0.25) !important; }
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.css"/>
 </head>
 <body class="bg-[#F9FAFB] text-dark font-sans overflow-x-hidden">
 
@@ -225,6 +230,7 @@
         <a href="#pricing" class="text-[13px] text-gray-400 hover:text-primary transition-colors font-medium">定价</a>
       </div>
       <div class="flex items-center gap-3">
+        <a href="javascript:void(0)" id="guide-help-btn" class="text-[13px] text-gray-400 hover:text-primary transition-colors font-medium hidden sm:block" title="使用指引" onclick="if(window.Guide){Guide.start(true);}return false;">❓</a>
         <a href="login.html" id="nav-login" class="text-[13px] text-gray-400 hover:text-primary transition-colors font-medium hidden sm:block">登录</a>
         <a href="profile.html" class="text-[13px] text-gray-400 hover:text-primary transition-colors font-medium hidden sm:block">个人中心</a>
         <a href="onboarding.html" class="btn-brand arrow-hover px-5 py-2 text-[13px] font-semibold text-white rounded-xl flex items-center gap-1.5">
@@ -740,6 +746,19 @@
       document.querySelectorAll('.bar-fill').forEach(b => b.style.width = b.getAttribute('data-width'));
       document.querySelectorAll('.counter').forEach(c => c.textContent = c.getAttribute('data-target'));
     }
+  </script>
+
+  <!-- driver.js + 引导初始化 -->
+  <script src="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.js.iife.js"></script>
+  <script src="guide.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      Guide.registerPage('index', [
+        { popover: { title: '欢迎来到 AI面镜', description: '30 秒带你走一遍怎么用。AI面镜是一款 AI 模拟面试工具，帮你全真演练、生成评分报告、追踪成长曲线。', side: 'bottom', align: 'center' } },
+        { element: 'a[href="onboarding.html"].btn-brand', popover: { title: '从这里开始', description: '点击「开始面试」进入完善简历页，上传你的简历和 JD，题目会更贴合你的经历。', side: 'bottom', align: 'start' } },
+      ]);
+      Guide.init('index');
+    });
   </script>
 </body>
 </html>

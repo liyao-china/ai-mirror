@@ -629,5 +629,11 @@
       }
     })();
   </script>
+  <script src="guide.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.Guide) Guide.init('profile');
+    });
+  </script>
 </body>
 </html>

@@ -926,5 +926,11 @@
       console.log('[历史页] 初始化完成，共', allRecords.length, '条记录');
     })();
   </script>
+  <script src="guide.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.Guide) Guide.init('history');
+    });
+  </script>
 </body>
 </html>

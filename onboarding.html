@@ -51,7 +51,12 @@
     .status-bar {
       transition: all 0.3s ease;
     }
+
+    /* driver.js 引导样式覆盖 */
+    .driver-popover { border-radius: 16px !important; }
+    .driver-active-element { box-shadow: 0 0 0 3px rgba(99,102,241,0.25) !important; }
   </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.css"/>
 </head>
 <body class="min-h-screen pb-20">
 
@@ -63,12 +68,15 @@
       </div>
       <span class="text-lg font-semibold text-gray-900">AI面镜</span>
     </div>
-    <a href="setup.html" class="text-gray-500 hover:text-brand text-sm flex items-center gap-1 transition-colors">
-      跳过
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
-      </svg>
-    </a>
+    <div class="flex items-center gap-3">
+      <a href="javascript:void(0)" id="guide-help-btn" class="text-sm text-gray-500 hover:text-brand transition-colors" title="使用指引" onclick="if(window.Guide){Guide.start(true);}return false;">❓</a>
+      <a href="setup.html" class="text-gray-500 hover:text-brand text-sm flex items-center gap-1 transition-colors">
+        跳过
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
+      </a>
+    </div>
   </nav>
 
   <!-- 页面标题区 -->
@@ -475,6 +483,20 @@
 
       // 跳转到 setup.html
       window.location.href = 'setup.html';
+    });
+  </script>
+
+  <!-- driver.js + 引导初始化 -->
+  <script src="https://cdn.jsdelivr.net/npm/driver.js@latest/dist/driver.js.iife.js"></script>
+  <script src="guide.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      Guide.registerPage('onboarding', [
+        { element: '#resumeText', popover: { title: '上传你的简历', description: '粘贴或上传简历，AI 会围绕你的真实经历追问，题目更精准。', side: 'bottom', align: 'start' } },
+        { element: '#jdText', popover: { title: '粘贴职位描述', description: '把目标岗位的 JD 贴进来，AI 会结合岗位要求出题。', side: 'bottom', align: 'start' } },
+        { element: '#saveBtn', popover: { title: '保存并开始配置', description: '确认简历和 JD 无误后，从这里进入面试配置。', side: 'top', align: 'center' } },
+      ]);
+      Guide.init('onboarding');
     });
   </script>
 </body>
