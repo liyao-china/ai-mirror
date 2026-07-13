@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>个人中心 - AI面镜</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'PingFang SC', 'Microsoft YaHei', 'sans-serif'],
+          },
+          colors: {
+            primary: '#6366F1',
+            brand: { from: '#6366F1', to: '#8B5CF6' },
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 20% 20%, rgba(99,102,241,0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(139,92,246,0.03) 0%, transparent 50%);
+      pointer-events: none;
+      z-index: 0;
+    }
+    body > * { position: relative; z-index: 1; }
+
+    /* 品牌渐变按钮 */
+    .btn-brand {
+      background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 4px 14px rgba(99,102,241,0.25), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .btn-brand:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(99,102,241,0.35);
+    }
+
+    /* 卡片统一样式 */
+    .card {
+      background: white;
+      border-radius: 1rem;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.08);
+    }
+
+    /* 菜单项悬停 */
+    .menu-item {
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body class="bg-[#F9FAFB] min-h-screen font-sans text-[#111827]">
+
+  <!-- 顶部导航 -->
+  <nav class="w-full bg-white/80 backdrop-blur-lg border-b border-gray-100 sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="index.html" class="flex items-center gap-2">
+        <span class="w-9 h-9 rounded-xl flex items-center justify-center text-xl" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)">🪞</span>
+        <span class="text-lg font-bold text-gray-900">AI面镜</span>
+      </a>
+      <div class="flex items-center gap-4">
+        <a href="setup.html" class="text-sm text-gray-500 hover:text-primary transition-colors">开始面试</a>
+        <a href="history.html" class="text-sm text-gray-500 hover:text-primary transition-colors">成长曲线</a>
+        <a href="profile.html" class="text-sm text-primary font-semibold transition-colors">个人中心</a>
+        <a href="membership.html" class="text-sm text-gray-500 hover:text-primary transition-colors">会员</a>
+        <a href="setup.html" class="btn-brand px-4 py-2 rounded-xl text-sm font-semibold text-white">+ 新面试</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ==================== 未登录态 ==================== -->
+  <div id="not-logged-in" class="hidden">
+    <div class="max-w-md mx-auto mt-32 flex flex-col items-center">
+      <div class="card p-10 w-full text-center">
+        <div class="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-5">
+          <span class="text-3xl">🔒</span>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">登录后查看你的个人中心</h2>
+        <p class="text-sm text-gray-500 mb-6">登录账号即可查看面试统计、管理账户信息</p>
+        <a href="login.html" class="btn-brand inline-block px-8 py-3 rounded-xl text-white font-semibold text-sm">去登录</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 已登录态 ==================== -->
+  <div id="logged-in" class="hidden">
+    <main class="max-w-6xl mx-auto px-6 pt-8 pb-20">
+      <div class="flex gap-6">
+
+        <!-- 左侧账户卡 -->
+        <aside class="w-[260px] flex-shrink-0">
+          <div class="card p-6 sticky top-24">
+            <!-- 头像 + 昵称 + 邮箱 -->
+            <div class="flex flex-col items-center text-center mb-5">
+              <div id="avatar" class="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-bold text-white mb-3" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)">U</div>
+              <p id="sidebar-nickname" class="text-lg font-bold text-gray-900 mb-1">用户</p>
+              <p id="sidebar-email" class="text-sm text-gray-500 mb-2">—</p>
+              <span class="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-md">免费用户</span>
+            </div>
+
+            <!-- 分割线 -->
+            <div class="border-t border-gray-100 mb-3"></div>
+
+            <!-- 菜单列表 -->
+            <div class="space-y-1">
+              <div class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer bg-indigo-50 text-primary font-semibold">
+                <span>👤</span><span>账户信息</span>
+              </div>
+              <a href="history.html" class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50">
+                <span>📈</span><span>历史成长</span>
+              </a>
+              <a href="membership.html" class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50">
+                <span>💳</span><span>我的会员</span>
+              </a>
+              <a href="settings.html" class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50">
+                <span>⚙️</span><span>设置</span>
+              </a>
+            </div>
+
+            <!-- 分割线 -->
+            <div class="border-t border-gray-100 mt-3 mb-3"></div>
+
+            <!-- 退出登录 -->
+            <div class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-red-500 hover:bg-red-50" onclick="handleLogout()">
+              <span>🚪</span><span>退出登录</span>
+            </div>
+          </div>
+        </aside>
+
+        <!-- 右侧主内容 -->
+        <div class="flex-1 min-w-0">
+
+          <!-- 1. 会员预告横幅 -->
+          <div class="rounded-2xl p-6 text-white mb-6" style="background:linear-gradient(135deg,#1F2937,#4338CA);">
+            <h3 class="text-lg font-bold mb-1">✨ 会员功能即将上线</h3>
+            <p class="text-sm text-gray-300 mb-4">无限次面试 · 高分回答对比 · 个性化练习计划（敬请期待）</p>
+            <a href="membership.html" class="inline-block px-4 py-2 bg-white/15 hover:bg-white/25 rounded-xl text-sm font-medium transition">了解会员权益 →</a>
+          </div>
+
+          <!-- 2. 使用概况白卡 -->
+          <div class="card p-6 mb-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">使用概况</h3>
+            <div class="grid grid-cols-3 gap-4">
+              <div class="bg-[#F9FAFB] rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-400 mb-1">累计面试</p>
+                <p class="text-2xl font-bold text-gray-900" id="stat-count">0</p>
+                <p class="text-xs text-gray-400 mt-1">场</p>
+              </div>
+              <div class="bg-[#F9FAFB] rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-400 mb-1">最佳得分</p>
+                <p class="text-2xl font-bold text-gray-900" id="stat-best">0</p>
+                <p class="text-xs text-gray-400 mt-1">分</p>
+              </div>
+              <div class="bg-[#F9FAFB] rounded-xl p-4 text-center">
+                <p class="text-xs text-gray-400 mb-1">较上次提升</p>
+                <p class="text-2xl font-bold text-gray-900" id="stat-diff">+0.0</p>
+                <p class="text-xs text-gray-400 mt-1">分</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 账户信息白卡 -->
+          <div class="card p-6 mb-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">账户信息</h3>
+            <div class="space-y-0">
+              <!-- 昵称 -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <span class="text-sm text-gray-500">昵称</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm font-medium text-gray-900" id="info-nickname">—</span>
+                  <button onclick="editNickname()" class="text-xs text-primary hover:text-indigo-400 transition-colors font-medium">编辑</button>
+                </div>
+              </div>
+              <!-- 邮箱 -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <span class="text-sm text-gray-500">邮箱</span>
+                <span class="text-sm font-medium text-gray-900" id="info-email">—</span>
+              </div>
+              <!-- 目标岗位 -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <span class="text-sm text-gray-500">目标岗位</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm font-medium text-gray-900" id="info-target-job">未设置</span>
+                  <button onclick="editTargetJob()" class="text-xs text-primary hover:text-indigo-400 transition-colors font-medium">编辑</button>
+                </div>
+              </div>
+              <!-- 简历 -->
+              <div class="flex items-center justify-between py-3 border-b border-gray-50">
+                <span class="text-sm text-gray-500">简历</span>
+                <div class="flex items-center gap-3">
+                  <span class="text-sm font-medium" id="info-resume-status">未上传</span>
+                  <button id="resume-view-btn" onclick="showResumeModal()" class="hidden text-xs text-primary hover:text-indigo-400 transition-colors font-medium">查看</button>
+                </div>
+              </div>
+              <!-- 会员状态 -->
+              <div class="flex items-center justify-between py-3">
+                <span class="text-sm text-gray-500">会员状态</span>
+                <span class="text-sm font-medium text-gray-900">免费用户</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. 历史面试报告卡 -->
+          <div class="card p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-4">历史面试报告</h3>
+            <!-- 空状态 -->
+            <div id="records-empty" class="hidden text-center py-10">
+              <p class="text-gray-400 text-sm mb-4">还没有面试记录</p>
+              <a href="setup.html" class="btn-brand inline-block px-6 py-2.5 rounded-xl text-white font-semibold text-sm">开始第一场面试</a>
+            </div>
+            <!-- 记录列表 -->
+            <div id="records-list"></div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 简历查看弹窗 -->
+  <div id="resume-modal" class="fixed inset-0 z-50 hidden" onclick="closeResumeModal(event)">
+    <div class="absolute inset-0 bg-black/40 backdrop-blur-sm"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-6">
+      <div class="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto relative" style="box-shadow:0 8px 32px rgba(0,0,0,0.15);" onclick="event.stopPropagation()">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-bold text-gray-900">简历详情</h3>
+          <button onclick="closeResumeModal()" class="text-gray-400 hover:text-gray-600 transition-colors text-xl leading-none">&times;</button>
+        </div>
+        <pre id="resume-content" class="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- 外部资源 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script>
+    // ===========================
+    // 工具函数
+    // ===========================
+
+    /** 检查用户是否已登录 */
+    function isLoggedIn() {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && /^sb-.*-auth-token$/.test(key)) return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    /** 获取 Supabase 客户端 */
+    function getSupabase() {
+      if (window.supabase && window.supabase.createClient) {
+        return window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+      }
+      return null;
+    }
+
+    /** 安全读取 JSON */
+    function safeGetJSON(key) {
+      try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; }
+    }
+
+    /** 格式化日期 */
+    function formatDate(dateStr) {
+      try {
+        const d = new Date(dateStr);
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+      } catch (e) { return dateStr || '未知时间'; }
+    }
+
+    /** 显示 Toast 提示 */
+    function showToast(text) {
+      let el = document.getElementById('toast');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'toast';
+        el.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-sm px-5 py-2.5 rounded-xl shadow-lg z-[999] transition-opacity duration-300';
+        document.body.appendChild(el);
+      }
+      el.textContent = text;
+      el.style.opacity = '1';
+      clearTimeout(el._t);
+      el._t = setTimeout(function() { el.style.opacity = '0'; }, 2500);
+    }
+
+    /** 得分颜色 */
+    function scoreColor(s) {
+      if (s >= 80) return '#10B981';
+      if (s >= 60) return '#6366F1';
+      return '#F59E0B';
+    }
+
+    /** HTML 转义 */
+    function escapeHtml(str) {
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ===========================
+    // 数据加载
+    // ===========================
+
+    /** 从云端或本地加载面试记录 */
+    async function loadRecords() {
+      if (isLoggedIn()) {
+        try {
+          const client = getSupabase();
+          if (client) {
+            const { data: user } = await client.auth.getUser();
+            if (user && user.user) {
+              const { data, error } = await client
+                .from('interview_records')
+                .select('*')
+                .eq('user_id', user.user.id)
+                .order('created_at', { ascending: false });
+              if (!error && data) {
+                return data.map(row => ({
+                  id: row.id,
+                  date: row.created_at || row.date,
+                  jobName: row.job_name || row.jobName || '',
+                  levelName: row.level_name || row.levelName || '',
+                  typeList: row.type_list || row.typeList || '',
+                  totalScore: typeof row.total_score === 'number' ? row.total_score : (typeof row.totalScore === 'number' ? row.totalScore : 0),
+                  report: row.report || null,
+                  qaRecords: row.qa_records || row.qaRecords || null,
+                }));
+              }
+            }
+          }
+        } catch (e) { console.warn('云端加载失败，回退本地', e); }
+      }
+      // 回退本地
+      const local = safeGetJSON('interviewHistory');
+      if (Array.isArray(local)) {
+        return local.map((item, idx) => ({
+          id: item.id || String(idx),
+          date: item.date || '',
+          jobName: item.jobName || '',
+          levelName: item.levelName || '',
+          typeList: item.typeList || '',
+          totalScore: typeof item.totalScore === 'number' ? item.totalScore : 0,
+          report: item.report || null,
+          qaRecords: item.qaRecords || null,
+        }));
+      }
+      return [];
+    }
+
+    // ===========================
+    // 统计渲染
+    // ===========================
+
+    function renderStats(records) {
+      var count = records.length;
+      document.getElementById('stat-count').textContent = count;
+
+      if (count === 0) {
+        document.getElementById('stat-best').textContent = '0';
+        document.getElementById('stat-diff').textContent = '+0.0';
+        return;
+      }
+
+      // 按时间正序排列
+      var sorted = records.slice().sort(function(a, b) {
+        return new Date(a.date) - new Date(b.date);
+      });
+
+      // 最佳得分
+      var best = Math.max.apply(null, sorted.map(function(r) { return r.totalScore; }));
+      document.getElementById('stat-best').textContent = best.toFixed(1);
+
+      // 较上次提升
+      if (count >= 2) {
+        var latestScore = sorted[count - 1].totalScore;
+        var prevScore = sorted[count - 2].totalScore;
+        var diff = latestScore - prevScore;
+        var diffStr = (diff >= 0 ? '+' : '') + diff.toFixed(1);
+        var diffEl = document.getElementById('stat-diff');
+        diffEl.textContent = diffStr;
+        if (diff > 0) {
+          diffEl.style.color = '#10B981';
+        } else if (diff < 0) {
+          diffEl.style.color = '#EF4444';
+        } else {
+          diffEl.style.color = '#9CA3AF';
+        }
+      } else {
+        document.getElementById('stat-diff').textContent = '+0.0';
+        document.getElementById('stat-diff').style.color = '#9CA3AF';
+      }
+    }
+
+    // ===========================
+    // 历史报告列表渲染
+    // ===========================
+
+    function renderRecordList(records) {
+      var container = document.getElementById('records-list');
+      var emptyEl = document.getElementById('records-empty');
+      container.innerHTML = '';
+
+      if (records.length === 0) {
+        emptyEl.classList.remove('hidden');
+        return;
+      }
+
+      emptyEl.classList.add('hidden');
+
+      // 最多 10 条，已经是倒序
+      var list = records.slice(0, 10);
+
+      list.forEach(function(record) {
+        var row = document.createElement('div');
+        row.className = 'flex items-center justify-between py-3 border-b border-gray-50 last:border-0';
+
+        // 类型标签（最多显示 2 个）
+        var types = (record.typeList || '').split(/[·,，]/).filter(function(t) { return t.trim(); });
+        var maxShow = 2;
+        var typeTags = types.slice(0, maxShow).map(function(t) {
+          return '<span class="text-xs bg-gray-100 px-2 py-0.5 rounded-md text-gray-500">' + escapeHtml(t.trim()) + '</span>';
+        }).join(' ');
+
+        // 得分颜色
+        var sc = record.totalScore;
+        var color = scoreColor(sc);
+
+        // 查看报告按钮状态
+        var hasReport = !!record.report;
+        var viewBtnClass = hasReport
+          ? 'text-sm text-primary hover:text-indigo-400 transition-colors font-medium cursor-pointer'
+          : 'text-sm text-gray-300 cursor-default';
+        var viewBtnExtra = hasReport ? '' : ' style="pointer-events:none" title="该记录未保存详细报告"';
+
+        row.innerHTML =
+          '<div class="flex-1 min-w-0">' +
+            '<div class="flex items-center gap-2 flex-wrap">' +
+              '<span class="text-sm font-semibold text-gray-900">' + escapeHtml(record.jobName) + ' · ' + escapeHtml(record.levelName) + '</span>' +
+              '<span class="flex items-center gap-1">' + typeTags + '</span>' +
+            '</div>' +
+            '<p class="text-xs text-gray-400 mt-1">' + formatDate(record.date) + '</p>' +
+          '</div>' +
+          '<div class="flex items-center gap-4 flex-shrink-0 ml-4">' +
+            '<span class="text-lg font-bold" style="color:' + color + '">' + sc + '</span>' +
+            '<a href="javascript:void(0)" class="view-report-link ' + viewBtnClass + '"' + viewBtnExtra + '>查看报告 →</a>' +
+          '</div>';
+
+        // 绑定查看报告
+        if (hasReport) {
+          row.querySelector('.view-report-link').addEventListener('click', function() {
+            handleViewReport(record);
+          });
+        }
+
+        container.appendChild(row);
+      });
+    }
+
+    /** 查看报告：存储数据并跳转 */
+    function handleViewReport(record) {
+      if (!record.report) {
+        showToast('这条旧记录没有保存详细报告');
+        return;
+      }
+      var viewData = {
+        report: record.report,
+        qaRecords: record.qaRecords,
+        meta: {
+          jobName: record.jobName,
+          levelName: record.levelName,
+          roundName: record.typeList.split('·')[0].trim(),
+          type: []
+        }
+      };
+      localStorage.setItem('viewHistoryReport', JSON.stringify(viewData));
+      window.location.href = 'report.html';
+    }
+
+    // ===========================
+    // 账户信息编辑
+    // ===========================
+
+    /** 编辑昵称 */
+    function editNickname() {
+      var current = localStorage.getItem('nickname') || document.getElementById('info-nickname').textContent;
+      var val = prompt('请输入新昵称', current);
+      if (val === null) return; // 用户取消
+      val = val.trim();
+      if (!val) {
+        showToast('昵称不能为空');
+        return;
+      }
+      localStorage.setItem('nickname', val);
+      // 更新页面显示
+      document.getElementById('info-nickname').textContent = val;
+      document.getElementById('sidebar-nickname').textContent = val;
+      // 更新头像首字母
+      document.getElementById('avatar').textContent = val.charAt(0).toUpperCase();
+      showToast('昵称已更新');
+    }
+
+    /** 编辑目标岗位 */
+    function editTargetJob() {
+      var current = localStorage.getItem('targetJob') || '';
+      var val = prompt('请输入目标岗位', current);
+      if (val === null) return;
+      val = val.trim();
+      if (!val) {
+        // 允许清空
+        localStorage.removeItem('targetJob');
+        document.getElementById('info-target-job').textContent = '未设置';
+        showToast('已清除目标岗位');
+        return;
+      }
+      localStorage.setItem('targetJob', val);
+      document.getElementById('info-target-job').textContent = val;
+      showToast('目标岗位已更新');
+    }
+
+    // ===========================
+    // 简历弹窗
+    // ===========================
+
+    function showResumeModal() {
+      var content = localStorage.getItem('resumeInfo') || '';
+      if (!content) return;
+      document.getElementById('resume-content').textContent = content;
+      document.getElementById('resume-modal').classList.remove('hidden');
+    }
+
+    function closeResumeModal(e) {
+      if (e && e.target !== e.currentTarget && e.target.closest('.absolute.inset-0 > .absolute')) return;
+      document.getElementById('resume-modal').classList.add('hidden');
+    }
+
+    // ===========================
+    // 退出登录
+    // ===========================
+
+    async function handleLogout() {
+      if (!confirm('确定要退出登录吗？')) return;
+      try {
+        var client = getSupabase();
+        if (client) await client.auth.signOut();
+      } catch (e) {}
+      // 清除所有 sb-* key
+      var keysToRemove = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (key && key.startsWith('sb-')) keysToRemove.push(key);
+      }
+      keysToRemove.forEach(function(k) { localStorage.removeItem(k); });
+      window.location.href = 'index.html';
+    }
+
+    // ===========================
+    // 页面初始化
+    // ===========================
+
+    (async function init() {
+      // 登录判断
+      if (!isLoggedIn()) {
+        document.getElementById('not-logged-in').classList.remove('hidden');
+        return;
+      }
+
+      document.getElementById('logged-in').classList.remove('hidden');
+
+      // 获取用户信息填充侧边栏
+      var userEmail = '';
+      try {
+        var client = getSupabase();
+        if (client) {
+          var { data: user } = await client.auth.getUser();
+          if (user && user.user) {
+            userEmail = user.user.email || '';
+          }
+        }
+      } catch (e) {}
+
+      // 昵称：优先 localStorage.nickname，无则邮箱@前缀
+      var nickname = localStorage.getItem('nickname') || (userEmail ? userEmail.split('@')[0] : '用户');
+      var avatarLetter = nickname.charAt(0).toUpperCase();
+
+      document.getElementById('avatar').textContent = avatarLetter;
+      document.getElementById('sidebar-nickname').textContent = nickname;
+      document.getElementById('sidebar-email').textContent = userEmail || '—';
+      document.getElementById('info-nickname').textContent = nickname;
+      document.getElementById('info-email').textContent = userEmail || '—';
+
+      // 目标岗位
+      var targetJob = localStorage.getItem('targetJob');
+      document.getElementById('info-target-job').textContent = targetJob || '未设置';
+
+      // 简历状态
+      var resumeInfo = localStorage.getItem('resumeInfo');
+      var resumeStatus = document.getElementById('info-resume-status');
+      var resumeViewBtn = document.getElementById('resume-view-btn');
+      if (resumeInfo && resumeInfo.trim()) {
+        resumeStatus.textContent = '已上传';
+        resumeStatus.className = 'text-sm font-medium text-green-600';
+        resumeViewBtn.classList.remove('hidden');
+      } else {
+        resumeStatus.textContent = '未上传';
+        resumeStatus.className = 'text-sm font-medium text-gray-400';
+        resumeViewBtn.classList.add('hidden');
+      }
+
+      // 加载面试记录
+      try {
+        var records = await loadRecords();
+        renderStats(records);
+        renderRecordList(records);
+      } catch (e) {
+        console.error('加载记录失败:', e);
+        showToast('加载面试记录失败，请刷新重试');
+      }
+    })();
+  </script>
+</body>
+</html>

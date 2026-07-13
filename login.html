@@ -191,10 +191,9 @@
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
           console.log('[登录页] 检测到已有登录会话，自动跳转');
-          window.location.href = 'setup.html';
-        }
-      } catch (e) {
-        console.warn('[登录页] 检查会话失败:', e);
+          window.location.href = 'profile.html';
+        } catch (e) {
+          console.warn('[登录页] 检查会话失败:', e);
       }
     }
 
@@ -266,7 +265,7 @@
           }
         } else {
           showMsg('登录成功，正在跳转...', 'success');
-          setTimeout(() => { window.location.href = 'setup.html'; }, 800);
+          setTimeout(() => { window.location.href = 'profile.html'; }, 800);
         }
       } catch (err) {
         console.error('[登录页] 登录异常:', err);
@@ -318,7 +317,7 @@
           }
         } else {
           showMsg('注册成功，正在跳转...', 'success');
-          setTimeout(() => { window.location.href = 'setup.html'; }, 800);
+          setTimeout(() => { window.location.href = 'profile.html'; }, 800);
         }
       } catch (err) {
         console.error('[登录页] 注册异常:', err);
