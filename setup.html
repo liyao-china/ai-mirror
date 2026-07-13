@@ -149,6 +149,21 @@
     /* 必填星号 */
     .required-star { color: #F59E0B; }
 
+    /* 必填缺失定位高亮 */
+    @keyframes flashMissing {
+      0%, 100% { box-shadow: 0 4px 20px rgba(99,102,241,0.06); }
+      25%, 75% { box-shadow: 0 0 0 3px rgba(245,158,11,0.55); }
+      50% { box-shadow: 0 0 0 5px rgba(245,158,11,0.35); }
+    }
+    .flash-missing { animation: flashMissing 1.5s ease; }
+
+    /* 按钮"待完成"态：可点击（用于定位缺失项），但视觉弱化 */
+    .btn-brand.btn-dim {
+      opacity: 0.45;
+      box-shadow: none;
+    }
+    .btn-brand.btn-dim:hover { transform: none; }
+
     /* 设备说明 */
     .device-info {
       background: #F9FAFB;
@@ -264,6 +279,13 @@
             背景信息
           </h2>
 
+          <!-- 已有简历摘要条（onboarding 填过时默认显示，代替整套表单） -->
+          <div id="resume-summary-bar" class="hidden mb-5 flex items-center justify-between gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+            <p class="text-sm text-emerald-700 min-w-0 truncate">✅ 已使用你在「完善背景」中填写的简历<span id="resume-summary-preview" class="text-emerald-500"></span></p>
+            <button type="button" onclick="expandResumeDetail()" class="text-sm text-primary font-medium flex-shrink-0 hover:underline">✎ 修改</button>
+          </div>
+
+          <div id="resume-detail">
           <!-- 简历来源下拉 -->
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1.5">简历来源</label>
@@ -295,6 +317,7 @@
             <label class="block text-sm font-medium text-gray-700 mb-1.5">补充背景</label>
             <textarea id="extra-bg" rows="3" placeholder="免登录用户可在这里粘贴简历内容..." class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-y"></textarea>
           </div>
+          </div><!-- /resume-detail -->
 
           <!-- 本次岗位 JD（必填） -->
           <div id="jd-section">
@@ -511,8 +534,8 @@
     // 回答方式选项
     const inputOptions = [
       { id: 'voice', emoji: '🎙️', name: '语音回答', desc: '更贴近真实面试' },
-      { id: 'video', emoji: '📹', name: '视频回答', desc: '', badge: '推荐' },
-      { id: 'text', emoji: '⌨️', name: '文字回答', desc: '适合安静环境' },
+      { id: 'video', emoji: '📹', name: '视频回答', desc: '更接近真实面试' },
+      { id: 'text', emoji: '⌨️', name: '文字回答', desc: '适合安静环境', badge: '零门槛' },
     ];
 
     // 设备说明文案
@@ -533,7 +556,8 @@
     let selectedRounds = new Set(['mentor']); // 默认选中 mentor
     let selectedTypes = new Set();
     let selectedDuration = 'standard';
-    let selectedInput = 'video';
+    let selectedInput = 'text'; // 默认文字：零设备门槛，首次体验最顺
+
     let deviceCheckResult = null; // null | 'pass' | 'fail'
 
     // ===========================
@@ -704,31 +728,31 @@
     // 底部摘要
     // ===========================
 
-    function updateSummary() {
+    /** 找到第一个未满足的必填项，返回 {selector, msg}；全部满足返回 null */
+    function getFirstMissing() {
       const jd = document.getElementById('jd-text').value.trim();
+      if (!jd) return { selector: '#jd-section', msg: '请先填写或上传本次岗位 JD（必填）' };
+      if (!selectedJob) return { selector: '#job-grid', msg: '请选择目标岗位（必选）' };
+      if (!selectedLevel) return { selector: '#level-grid', msg: '请选择职级（必选）' };
+      if (selectedRounds.size === 0) return { selector: '#rounds-grid', msg: '请至少选择一个面试轮次' };
+      return null;
+    }
+
+    function updateSummary() {
       const el = document.getElementById('bottom-summary');
       const btn = document.getElementById('btn-start');
       const parts = [];
 
-      // 必填项检查
-      if (!jd) {
-        el.textContent = '请先填写或上传本次岗位 JD（必填）';
-        btn.disabled = true;
+      // 必填项检查：按钮保持可点击（点击时滚动定位缺失项），但视觉弱化
+      const missing = getFirstMissing();
+      if (missing) {
+        el.textContent = missing.msg;
+        btn.disabled = false;
+        btn.classList.add('btn-dim');
         updateStepBar();
         return;
       }
-      if (!selectedJob || !selectedLevel) {
-        el.textContent = '请再选择岗位和职级（必选）';
-        btn.disabled = true;
-        updateStepBar();
-        return;
-      }
-      if (selectedRounds.size === 0) {
-        el.textContent = '请至少选择一个面试轮次';
-        btn.disabled = true;
-        updateStepBar();
-        return;
-      }
+      btn.classList.remove('btn-dim');
 
       // 岗位 + 职级
       parts.push(jobNames[selectedJob] || selectedJob);
@@ -879,6 +903,37 @@
         const matchOption = Array.from(sel.options).find(o => o.value === activeResumeId);
         if (matchOption) sel.value = activeResumeId;
       }
+    }
+
+    // ===========================
+    // 简历区折叠（onboarding 已填过时避免重复表单）
+    // ===========================
+
+    function initResumeCollapse() {
+      const resumeInfo = (localStorage.getItem('resumeInfo') || '').trim();
+      if (!resumeInfo) return; // 没填过，维持展开表单
+
+      const bar = document.getElementById('resume-summary-bar');
+      const detail = document.getElementById('resume-detail');
+      const preview = document.getElementById('resume-summary-preview');
+      const sel = document.getElementById('resume-source');
+
+      // 折叠详情，显示摘要条
+      detail.classList.add('hidden');
+      bar.classList.remove('hidden');
+      const firstLine = resumeInfo.replace(/【简历内容】\s*/,'').split('\n').find(l => l.trim()) || '';
+      preview.textContent = firstLine ? '：' + firstLine.slice(0, 24) + (firstLine.length > 24 ? '…' : '') : '';
+
+      // 关键：折叠态下简历来源固定为「当前浏览器已有简历」，
+      // 否则默认 none 会在 handleStart 里把 resumeInfo 清空（数据丢失）
+      const cur = Array.from(sel.options).find(o => o.value === 'current');
+      if (cur) sel.value = 'current';
+    }
+
+    /** 展开简历详情编辑 */
+    function expandResumeDetail() {
+      document.getElementById('resume-summary-bar').classList.add('hidden');
+      document.getElementById('resume-detail').classList.remove('hidden');
     }
 
     // ===========================
@@ -1122,7 +1177,10 @@
         const quota = await AIProxy.quota();
         const remaining = Math.max(0, Math.floor((quota.limit - quota.used) / 35));
         const el = document.getElementById('quota-display');
-        if (!isLoggedIn()) {
+        if (remaining <= 0) {
+          // 额度耗尽时给引导话术，避免冷冰冰的「剩余 0 场」劝退用户
+          el.textContent = isLoggedIn() ? '今日额度即将用尽' : '今日免费额度已用较多，登录可提升额度';
+        } else if (!isLoggedIn()) {
           el.textContent = '今日剩余约 ' + remaining + ' 场（登录可提额）';
         } else {
           el.textContent = '今日剩余约 ' + remaining + ' 场';
@@ -1138,6 +1196,24 @@
 
     async function handleStart() {
       const btn = document.getElementById('btn-start');
+
+      // 必填缺失：滚动定位到第一个缺失模块并高亮，不进入启动流程
+      const missing = getFirstMissing();
+      if (missing) {
+        const target = document.querySelector(missing.selector);
+        const section = target ? (target.closest('section') || target) : null;
+        if (section) {
+          section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          section.classList.remove('flash-missing');
+          void section.offsetWidth; // 重置动画
+          section.classList.add('flash-missing');
+          setTimeout(() => section.classList.remove('flash-missing'), 1600);
+        }
+        const summaryEl = document.getElementById('bottom-summary');
+        summaryEl.textContent = missing.msg;
+        return;
+      }
+
       btn.disabled = true;
       btn.textContent = '准备中...';
 
@@ -1178,10 +1254,10 @@
         }
 
         // 保存到 localStorage
+        // 注意：finalResume 为空时保留已有 resumeInfo——用户可能在 onboarding
+        // 填过简历但这里默认选了「不使用附件」，删键会造成静默数据丢失。
         if (finalResume) {
           localStorage.setItem('resumeInfo', finalResume);
-        } else {
-          localStorage.removeItem('resumeInfo');
         }
 
         const jdText = document.getElementById('jd-text').value.trim();
@@ -1291,6 +1367,7 @@
 
       // 初始化简历相关
       initResumeSource();
+      initResumeCollapse();
       initFileUpload();
       initJDImageUpload();
       initJDListener();
@@ -1314,13 +1391,9 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       Guide.registerPage('setup', [
-        { element: '#job-grid', popover: { title: '选择目标岗位', description: '告诉面试官你要面什么岗，系统会围绕该岗位出题。', side: 'bottom', align: 'start' } },
-        { element: '#level-grid', popover: { title: '选择职级', description: '实习、校招、初级到专家，难度和深度会随之调整。', side: 'bottom', align: 'start' } },
-        { element: '#rounds-grid', popover: { title: '面试官人设', description: 'Mentor、Leader、总监、HR，不同轮次提问风格不同。', side: 'bottom', align: 'start' } },
-        { element: '#type-grid', popover: { title: '面试类型与题型', description: '行为面、技术面、项目深度面、压力面等自由组合。', side: 'bottom', align: 'start' } },
-        { element: '#input-grid', popover: { title: '作答方式', description: '支持打字输入，也可以开麦克风语音作答，甚至开摄像头视频面试。', side: 'bottom', align: 'start' } },
-        { element: '#resume-source, #jd-section', popover: { title: '简历与 JD', description: '如果之前在完善简历页已填写，这里会自动带入；也可以现场补充。', side: 'top', align: 'start' } },
-        { element: '#btn-start', popover: { title: '开始面试', description: '所有选项确认无误后，从这里正式进入面试房间。', side: 'top', align: 'center' } },
+        { element: '#job-grid', popover: { title: '选择岗位与职级', description: '告诉面试官你要面什么岗、什么级别，题目难度和深度会随之调整。', side: 'bottom', align: 'start' } },
+        { element: '#rounds-grid', popover: { title: '面试官人设与作答方式', description: 'Mentor、Leader、总监、HR 提问风格各不同；作答支持打字、开麦语音，甚至视频面试。', side: 'bottom', align: 'start' } },
+        { element: '#btn-start', popover: { title: '开始面试', description: '填好 JD、确认选项后，从这里正式进入面试房间。', side: 'top', align: 'center' } },
       ]);
       Guide.init('setup');
     });

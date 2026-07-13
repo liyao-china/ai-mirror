@@ -492,9 +492,8 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       Guide.registerPage('onboarding', [
-        { element: '#resumeText', popover: { title: '上传你的简历', description: '粘贴或上传简历，AI 会围绕你的真实经历追问，题目更精准。', side: 'bottom', align: 'start' } },
-        { element: '#jdText', popover: { title: '粘贴职位描述', description: '把目标岗位的 JD 贴进来，AI 会结合岗位要求出题。', side: 'bottom', align: 'start' } },
-        { element: '#saveBtn', popover: { title: '保存并开始配置', description: '确认简历和 JD 无误后，从这里进入面试配置。', side: 'top', align: 'center' } },
+        { element: '#resumeText', popover: { title: '上传简历和岗位 JD', description: '粘贴或上传简历、贴入目标岗位 JD——AI 会围绕你的真实经历和岗位要求出题、追问。', side: 'bottom', align: 'start' } },
+        { element: '#saveBtn', popover: { title: '保存并开始配置', description: '确认无误后，从这里进入面试配置。也可以点右上角「跳过」直接配置。', side: 'top', align: 'center' } },
       ]);
       Guide.init('onboarding');
     });

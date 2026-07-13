@@ -371,20 +371,6 @@
   <div id="qa-record-area" class="hidden">
     <!-- 聊天气泡列表，由 JS 动态填充 -->
     <div id="qa-bubble-list"></div>
-    <!-- ASR 重试气泡（在字幕卡下方，条件显示） -->
-    <div id="asr-retry-bubble" class="hidden">
-      <p class="text-sm text-gray-600">这段没识别到清晰的语音内容，可能太短或环境嘈杂。</p>
-      <div class="flex gap-3 mt-2">
-        <button onclick="startRecording()" class="text-primary text-sm font-medium">🎙️ 重新录音</button>
-        <button onclick="switchToTextMode()" class="text-primary text-sm font-medium">⌨️ 改用文字</button>
-      </div>
-    </div>
-    <!-- 实时转录气泡容器（录音时条件显示） -->
-    <div id="interim-bubble" class="hidden">
-      <span class="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse mr-1"></span>
-      <span class="text-sm text-gray-500">正在实时转录...</span>
-      <p id="interim-text" class="text-sm text-gray-400 mt-1"></p>
-    </div>
   </div>
 
   <!-- ============================================== -->
@@ -409,6 +395,20 @@
       </div>
       <!-- 麦克风语音区（语音/视频模式显示，文字模式隐藏） -->
       <div id="mic-area" class="hidden flex flex-col items-center gap-2">
+        <!-- 实时转录气泡（录音时条件显示，必须放在可见容器内） -->
+        <div id="interim-bubble" class="hidden w-full max-w-md bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5">
+          <span class="inline-block w-2 h-2 bg-red-500 rounded-full animate-pulse mr-1"></span>
+          <span class="text-sm text-gray-500">正在实时转录...</span>
+          <p id="interim-text" class="text-sm text-gray-400 mt-1"></p>
+        </div>
+        <!-- ASR 失败重试气泡（必须放在可见容器内） -->
+        <div id="asr-retry-bubble" class="hidden w-full max-w-md bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <p class="text-sm text-gray-600">这段没识别到清晰的语音内容，可能太短或环境嘈杂。</p>
+          <div class="flex gap-3 mt-2">
+            <button onclick="startRecording()" class="text-primary text-sm font-medium">🎙️ 重新录音</button>
+            <button onclick="switchToTextMode()" class="text-primary text-sm font-medium">⌨️ 改用文字</button>
+          </div>
+        </div>
         <canvas id="spectrum-canvas" width="200" height="40" class="hidden"></canvas>
         <button id="mic-btn" onclick="toggleMic()">
           🎙️
@@ -1406,8 +1406,10 @@ ${model}
         return;
       }
 
-      // 语音/视频模式
-      const voice = voiceByRound[cfg.round] || 'Ethan';
+      // 语音/视频模式（多轮时按当前轮次取音色，而不是固定第一轮）
+      const currentRoundKey = (series && series.rounds) ? series.rounds[series.index] : cfg.round;
+      const voice = voiceByRound[currentRoundKey] || 'Ethan';
+      typewriterAbort = false;
       setAvatarState('speaking');
       updateStatusCapsule('面试官正在提问', '正在生成语音…');
       $subtitleCard().classList.remove('hidden');
@@ -1416,6 +1418,7 @@ ${model}
       let audio = null;
       let rafId = null;
       let resolved = false;
+      let fallbackStarted = false; // 防止降级后远程音频迟到就绪导致双声道
 
       const cleanup = () => {
         if (rafId) cancelAnimationFrame(rafId);
@@ -1424,6 +1427,7 @@ ${model}
           audio.onended = null;
           audio.onerror = null;
           audio.oncanplay = null;
+          if (ttsAudio === audio) ttsAudio = null;
           audio = null;
         }
       };
@@ -1449,15 +1453,20 @@ ${model}
           }
 
           audio = new Audio(url);
+          ttsAudio = audio; // 让 stopSpeaking 能打断本次播报
 
           audio.onerror = () => {
+            if (fallbackStarted) return;
+            fallbackStarted = true;
             console.warn(LOG, '音频加载失败，降级浏览器 TTS');
             doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
           };
 
           audio.oncanplay = () => {
-            if (resolved) return;
+            if (resolved || fallbackStarted) return;
             audio.play().catch(err => {
+              if (fallbackStarted) return;
+              fallbackStarted = true;
               console.warn(LOG, '音频播放失败:', err);
               doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
             });
@@ -1470,6 +1479,12 @@ ${model}
             const totalChars = text.length;
             const tick = () => {
               if (!audio || resolved) return;
+              // 用户打断（点麦克风等）：补全字幕并立即结束，避免 Promise 永不 resolve
+              if (typewriterAbort) {
+                $subtitleText().textContent = text;
+                doResolve();
+                return;
+              }
               if (audio.paused && audio.currentTime === 0) {
                 rafId = requestAnimationFrame(tick);
                 return;
@@ -1494,13 +1509,15 @@ ${model}
             }
           };
 
-          // 兜底：如果音频 500ms 内没有触发任何事件，直接降级
+          // 兜底：如果音频 4 秒内仍未就绪，降级浏览器 TTS（500ms 太激进，远程音频经常误伤）
           setTimeout(() => {
-            if (!resolved && audio && audio.readyState < 2) {
+            if (!resolved && !fallbackStarted && audio && audio.readyState < 2) {
+              fallbackStarted = true;
+              try { audio.pause(); audio.src = ''; } catch(e) {}
               console.warn(LOG, '音频长时间未就绪，降级浏览器 TTS');
               doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
             }
-          }, 500);
+          }, 4000);
 
         } catch (err) {
           console.warn(LOG, 'TTS 请求失败:', err);
@@ -1626,8 +1643,8 @@ ${model}
       // 停止计时
       stopTimer();
 
-      // 停止语音播报和录音，释放视频资源
-      if (isRecording) stopRecording();
+      // 停止语音播报和录音（丢弃未提交的录音），释放视频资源
+      if (isRecording) stopRecording(true);
       stopSpeaking();
       if (audioContext) { audioContext.close(); audioContext = null; }
       cleanupVideo();
@@ -1957,13 +1974,22 @@ ${model}
 
       } catch (err) {
         console.error(LOG, '录音启动失败:', err);
-        stopRecording();
+        // 不走 stopRecording()（会触发一次空提交/识别错误提示），直接复位 UI
+        isRecording = false;
+        const btn = document.getElementById('mic-btn');
+        btn.innerHTML = '🎙️';
+        btn.classList.remove('recording');
+        btn.disabled = false;
+        document.getElementById('ripple-1').classList.remove('animate');
+        document.getElementById('ripple-2').classList.remove('animate');
+        document.getElementById('spectrum-canvas').classList.add('hidden');
+        if (audioContext) { try { audioContext.close(); } catch(e) {} audioContext = null; analyserNode = null; }
         showDeviceError(err);
       }
     }
 
-    /** 停止录音并提交 */
-    async function stopRecording() {
+    /** 停止录音并提交；discard=true 时只停止不提交（如面试结束时） */
+    async function stopRecording(discard) {
       if (!isRecording) return;
       isRecording = false;
 
@@ -1994,11 +2020,12 @@ ${model}
       }
       document.getElementById('interim-bubble').classList.add('hidden');
 
-      // 必须等待 MediaRecorder 真正停止并收集完最后一段数据
+      // 必须等待 MediaRecorder 真正停止并收集完最后一段数据（3 秒兜底防止挂起）
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         await new Promise(resolve => {
-          mediaRecorder.onstop = resolve;
-          mediaRecorder.stop();
+          const timer = setTimeout(resolve, 3000);
+          mediaRecorder.onstop = () => { clearTimeout(timer); resolve(); };
+          try { mediaRecorder.stop(); } catch (e) { clearTimeout(timer); resolve(); }
         });
       }
 
@@ -2009,6 +2036,12 @@ ${model}
         : null;
       audioChunks = [];
       mediaRecorder = null;
+
+      // 面试结束等场景：只停止录音，不做识别提交
+      if (discard) {
+        micBtn.disabled = false;
+        return;
+      }
 
       // 提交识别
       await submitVoiceAnswer(fullBlob);
@@ -2035,7 +2068,8 @@ ${model}
           new Promise((_, reject) => setTimeout(() => reject(new Error('ASR 超时')), 30000))
         ]);
 
-        text = (result && result.text) || '';
+        // AIProxy.asr 直接 resolve 出文本字符串（见 ai-client.js），兼容对象形态兜底
+        text = typeof result === 'string' ? result.trim() : ((result && result.text) || '');
 
         if (!text) {
           // 云端 ASR 未返回内容，回退浏览器实时识别文本
@@ -2049,6 +2083,8 @@ ${model}
         text = corrected || text;
 
         console.log(LOG, 'ASR 识别成功:', text.substring(0, 50));
+        // 必须先释放防重入标志，否则 submitAnswer 开头的检查会直接 return（死锁）
+        isProcessingAnswer = false;
         submitAnswer(text);
 
       } catch (err) {
@@ -2058,8 +2094,9 @@ ${model}
         text = browserInterimText.trim();
         if (text) {
           console.log(LOG, '回退浏览器识别文本:', text.substring(0, 50));
+          isProcessingAnswer = false;
           submitAnswer(text);
-          return; // isProcessingAnswer 在 submitAnswer 中或最后统一清理
+          return;
         }
 
         // 彻底失败：在 mic-area 内显示可见错误控件
@@ -2196,7 +2233,7 @@ ${model}
 
     /** 切换到文字模式 */
     function switchToTextMode() {
-      if (isRecording) stopRecording();
+      if (isRecording) stopRecording(true); // 丢弃录音，改为文字输入
       cfg.input = 'text';
       document.getElementById('asr-retry-bubble').classList.add('hidden');
       document.getElementById('mic-area').classList.add('hidden');
