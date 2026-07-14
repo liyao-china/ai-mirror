@@ -26,11 +26,18 @@
 
     /* === 面试官头像动画 === */
 
+    /* SVG 子元素统一以自身包围盒为变形基准，否则 scaleY 会以画布原点缩放（表现为不动或飞出） */
+    .avatar-mouth, .avatar-eyes {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
     /* 说话动画：嘴巴 scaleY 循环 + 外圈紫色呼吸光环 */
     .avatar-speaking .avatar-mouth {
       animation: mouthTalk 200ms ease-in-out infinite alternate;
     }
-    .avatar-speaking .avatar-ring {
+    /* 光环是 #avatar-main 的兄弟节点，由 JS 加 ring-active 类驱动 */
+    .avatar-ring.ring-active {
       animation: ringBreath 1.2s ease-in-out infinite;
     }
     @keyframes mouthTalk {
@@ -916,6 +923,10 @@
       avatar.classList.remove('avatar-speaking', 'avatar-thinking', 'avatar-idle', 'avatar-listening');
       // 移除 blink 状态
       avatar.classList.remove('blink');
+
+      // 光环与头像是兄弟节点，CSS 后代选择器够不到，说话时由这里点亮
+      const ring = $avatarRing();
+      if (ring) ring.classList.toggle('ring-active', state === 'speaking');
 
       switch (state) {
         case 'speaking':

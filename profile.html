@@ -118,6 +118,10 @@
               <a href="history.html" class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50">
                 <span>📈</span><span>历史成长</span>
               </a>
+              <div class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50" onclick="showKnowledgeTeaser()">
+                <span>🧠</span><span>我的知识库</span>
+                <span class="ml-auto text-[10px] font-semibold text-primary bg-indigo-50 px-1.5 py-0.5 rounded-md">即将上线</span>
+              </div>
               <a href="membership.html" class="menu-item flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm cursor-pointer text-gray-600 hover:bg-gray-50">
                 <span>💳</span><span>我的会员</span>
               </a>
@@ -293,6 +297,31 @@
       el.style.opacity = '1';
       clearTimeout(el._t);
       el._t = setTimeout(function() { el.style.opacity = '0'; }, 2500);
+    }
+
+    /** 知识库预告弹窗（功能复赛版开放，先展示产品纵深） */
+    function showKnowledgeTeaser() {
+      if (document.getElementById('kb-teaser-modal')) return;
+      const modal = document.createElement('div');
+      modal.id = 'kb-teaser-modal';
+      modal.className = 'fixed inset-0 z-[100] flex items-center justify-center px-4';
+      modal.style.cssText = 'background:rgba(0,0,0,0.5); backdrop-filter:blur(4px);';
+      modal.innerHTML = `
+        <div class="bg-white rounded-2xl p-8 max-w-md w-full relative" style="box-shadow:0 20px 60px rgba(0,0,0,0.15);">
+          <button onclick="document.getElementById('kb-teaser-modal').remove()" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl mb-4" style="background:linear-gradient(135deg,#EEF2FF,#F3E8FF);">🧠</div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">我的面试知识库 <span class="text-[11px] font-semibold text-primary bg-indigo-50 px-2 py-0.5 rounded-md align-middle">即将上线</span></h3>
+          <p class="text-sm text-gray-500 leading-relaxed mb-5">你的私有面试情报中心——所有数据仅自己可见：</p>
+          <ul class="space-y-3 mb-6">
+            <li class="flex items-start gap-2.5 text-sm text-gray-600"><span class="mt-0.5">📝</span><span><b class="text-gray-800">真实面经沉淀</b>：把你亲身经历的面试记录下来，按公司/岗位/轮次归档</span></li>
+            <li class="flex items-start gap-2.5 text-sm text-gray-600"><span class="mt-0.5">📊</span><span><b class="text-gray-800">模拟历史入库</b>：每场模拟面试的报告自动转化为知识条目</span></li>
+            <li class="flex items-start gap-2.5 text-sm text-gray-600"><span class="mt-0.5">🎯</span><span><b class="text-gray-800">越练越懂你</b>：下一场面试的追问会带着你的历史弱项来，重复短板无处可藏</span></li>
+          </ul>
+          <button onclick="document.getElementById('kb-teaser-modal').remove()" class="w-full py-3 rounded-xl text-sm font-semibold text-white transition" style="background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%);">期待上线</button>
+        </div>
+      `;
+      modal.onclick = function(e) { if (e.target === modal) modal.remove(); };
+      document.body.appendChild(modal);
     }
 
     /** 得分颜色 */
