@@ -391,7 +391,7 @@
         </div>
         <canvas id="spectrum-canvas" width="200" height="40" class="hidden"></canvas>
         <button id="mic-btn" onclick="toggleMic()">
-          🎙️
+          <span id="mic-icon">🎙️</span>
           <div id="ripple-1" class="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-0"></div>
           <div id="ripple-2" class="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-0"></div>
         </button>
@@ -1691,7 +1691,8 @@ ${model}
       // 语音/视频模式：恢复麦克风提示与可用态，提示用户可以开始回答
       if (cfg && cfg.input !== 'text') {
         const micBtn = document.getElementById('mic-btn');
-        if (micBtn) { micBtn.disabled = false; micBtn.innerHTML = '🎙️'; micBtn.classList.remove('recording'); }
+        if (micBtn) { micBtn.disabled = false; micBtn.classList.remove('recording'); }
+        setMicIcon('🎙️');
         const micHint = document.getElementById('mic-hint');
         if (micHint) { micHint.textContent = '点击麦克风开始回答'; micHint.classList.remove('text-red-500'); micHint.classList.add('text-gray-500'); }
       }
@@ -2018,7 +2019,8 @@ ${model}
           isProcessingAnswer = false;
           processingSince = 0;
           const b = document.getElementById('mic-btn');
-          if (b) { b.disabled = false; b.innerHTML = '🎙️'; b.classList.remove('recording'); }
+          if (b) { b.disabled = false; b.classList.remove('recording'); }
+          setMicIcon('🎙️');
           const hint = document.getElementById('mic-hint');
           if (hint) { hint.textContent = '处理超时，请点麦克风重新回答'; hint.classList.remove('text-red-500'); }
           updateStatusCapsule('处理超时', '请重新回答或改用文字');
@@ -2066,6 +2068,18 @@ ${model}
       audio.play().catch(e => {});
     }
 
+    /** 设置麦克风图标（严禁改 mic-btn.innerHTML——那会把内部波纹元素抹掉导致空指针崩溃） */
+    function setMicIcon(icon) {
+      const el = document.getElementById('mic-icon');
+      if (el) el.textContent = icon;
+    }
+
+    /** 空值安全的 classList 操作 */
+    function safeCls(id, op, cls) {
+      const el = document.getElementById(id);
+      if (el && el.classList) el.classList[op](cls);
+    }
+
     /** 麦克风按钮点击切换 */
     function toggleMic() {
       // 录音中：优先停止（不管 isProcessingAnswer，因为录音中意味着还没进到识别阶段）
@@ -2097,16 +2111,15 @@ ${model}
       audioChunks = [];
       browserInterimText = '';
 
-      // UI 更新
+      // UI 更新（一律走空值安全通道）
       const micBtn = document.getElementById('mic-btn');
-      micBtn.innerHTML = '⏹';
-      micBtn.classList.add('recording');
-      micBtn.disabled = false; // 确保可用
-      document.getElementById('ripple-1').classList.add('animate');
-      document.getElementById('ripple-2').classList.add('animate');
-      document.getElementById('spectrum-canvas').classList.remove('hidden');
-      document.getElementById('asr-retry-bubble').classList.add('hidden');
-      document.getElementById('interim-bubble').classList.add('hidden');
+      setMicIcon('⏹');
+      if (micBtn) { micBtn.classList.add('recording'); micBtn.disabled = false; }
+      safeCls('ripple-1', 'add', 'animate');
+      safeCls('ripple-2', 'add', 'animate');
+      safeCls('spectrum-canvas', 'remove', 'hidden');
+      safeCls('asr-retry-bubble', 'add', 'hidden');
+      safeCls('interim-bubble', 'add', 'hidden');
       // 醒目引导：告诉用户说完要点一下停止
       const micHint = document.getElementById('mic-hint');
       if (micHint) { micHint.textContent = '🔴 录音中 · 说完后点一下上面的按钮结束'; micHint.classList.add('text-red-500'); micHint.classList.remove('text-gray-500'); }
@@ -2170,12 +2183,11 @@ ${model}
         // 不走 stopRecording()（会触发一次空提交/识别错误提示），直接复位 UI
         isRecording = false;
         const btn = document.getElementById('mic-btn');
-        btn.innerHTML = '🎙️';
-        btn.classList.remove('recording');
-        btn.disabled = false;
-        document.getElementById('ripple-1').classList.remove('animate');
-        document.getElementById('ripple-2').classList.remove('animate');
-        document.getElementById('spectrum-canvas').classList.add('hidden');
+        setMicIcon('🎙️');
+        if (btn) { btn.classList.remove('recording'); btn.disabled = false; }
+        safeCls('ripple-1', 'remove', 'animate');
+        safeCls('ripple-2', 'remove', 'animate');
+        safeCls('spectrum-canvas', 'add', 'hidden');
         if (audioContext) { try { audioContext.close(); } catch(e) {} audioContext = null; analyserNode = null; }
         showDeviceError(err);
       }
@@ -2197,14 +2209,13 @@ ${model}
         mediaRecorder._silenceCheck = null;
       }
 
-      // UI：立即显示识别状态，禁用麦克风防止重复提交
+      // UI：立即显示识别状态，禁用麦克风防止重复提交（空值安全）
       const micBtn = document.getElementById('mic-btn');
-      micBtn.innerHTML = '🎙️';
-      micBtn.classList.remove('recording');
-      micBtn.disabled = true; // 禁用直到识别完成
-      document.getElementById('ripple-1').classList.remove('animate');
-      document.getElementById('ripple-2').classList.remove('animate');
-      document.getElementById('spectrum-canvas').classList.add('hidden');
+      setMicIcon('🎙️');
+      if (micBtn) { micBtn.classList.remove('recording'); micBtn.disabled = true; } // 禁用直到识别完成
+      safeCls('ripple-1', 'remove', 'animate');
+      safeCls('ripple-2', 'remove', 'animate');
+      safeCls('spectrum-canvas', 'add', 'hidden');
       const micHintEl = document.getElementById('mic-hint');
       if (micHintEl) { micHintEl.textContent = '正在识别你的回答…'; micHintEl.classList.remove('text-red-500'); micHintEl.classList.add('text-gray-500'); }
       updateStatusCapsule('正在识别你的回答…', '请稍候');
@@ -2247,7 +2258,7 @@ ${model}
       // 面试结束等场景：只停止录音，不做识别提交
       if (discard) {
         isProcessingAnswer = false;
-        micBtn.disabled = false;
+        if (micBtn) micBtn.disabled = false;
         return;
       }
 
@@ -2259,7 +2270,7 @@ ${model}
         showAsrError();
       } finally {
         isProcessingAnswer = false;
-        micBtn.disabled = false;
+        if (micBtn) micBtn.disabled = false;
       }
     }
 
