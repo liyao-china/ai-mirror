@@ -1171,6 +1171,11 @@ ${model}
         // 根据 cfg.input 初始化交互区显示
         initInputArea();
 
+        // 预加载过渡音频（语音/视频模式，不阻塞开场白）
+        if (cfg.input !== 'text') {
+          preloadTransitionAudios(roundKey);
+        }
+
         // 统一呈现开场白
         presentQuestion(openingText).then(() => {
           // push 进 messages
@@ -1271,6 +1276,11 @@ ${model}
         isProcessingAnswer = false;
         finishInterview(false);
         return;
+      }
+
+      // 语音/视频模式：先播放过渡音频（不阻塞），再后台出题
+      if (cfg.input !== 'text') {
+        playTransitionAudio();
       }
 
       // 请求下一个问题
@@ -1934,9 +1944,39 @@ ${model}
     let isProcessingAnswer = false;  // 防重入：录音→识别→提交期间禁止重复触发（新）
     let subtitleVisible = true;      // 字幕是否可见
 
+    // 过渡音频缓存
+    const TRANSITION_PHRASES = ['嗯。', '好的。', '我想一下。'];
+    let transitionAudios = [];       // 预加载的过渡音频 URL 数组
+
     /** 获取当前轮次对应的岗位名和级别名 */
     function getJobName() { return jobNames[cfg.job] || cfg.job; }
     function getLevelName() { return levelNames[cfg.level] || cfg.level; }
+
+    /** 预加载过渡音频（3 条短语用当前轮次音色合成，不阻塞） */
+    async function preloadTransitionAudios(roundKey) {
+      const voice = voiceByRound[roundKey] || 'Ethan';
+      transitionAudios = [];
+      for (const phrase of TRANSITION_PHRASES) {
+        try {
+          const url = await AIProxy.tts(phrase, voice);
+          if (url) transitionAudios.push(url);
+        } catch (e) {
+          console.warn(LOG, '过渡音频预加载失败:', phrase, e.message);
+        }
+      }
+      console.log(LOG, '过渡音频预加载完成:', transitionAudios.length, '条');
+    }
+
+    /** 随机播放一条过渡音频（音量 0.9，不阻塞） */
+    function playTransitionAudio() {
+      if (!transitionAudios.length) return;
+      const idx = Math.floor(Math.random() * transitionAudios.length);
+      const url = transitionAudios[idx];
+      if (!url) return;
+      const audio = new Audio(url);
+      audio.volume = 0.9;
+      audio.play().catch(e => {});
+    }
 
     /** 麦克风按钮点击切换 */
     function toggleMic() {
