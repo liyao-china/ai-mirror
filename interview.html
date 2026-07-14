@@ -395,6 +395,8 @@
           <div id="ripple-1" class="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-0"></div>
           <div id="ripple-2" class="absolute inset-0 rounded-full border-2 border-indigo-400 opacity-0"></div>
         </button>
+        <!-- 麦克风操作提示（随录音状态切换文案） -->
+        <p id="mic-hint" class="text-sm font-medium text-gray-500">点击麦克风开始回答</p>
         <button id="switch-to-text-btn" class="text-sm text-gray-400 hover:text-primary transition-colors" onclick="switchToTextMode()">⌨️ 改用文字</button>
       </div>
       <!-- 字幕开关按钮 -->
@@ -1649,6 +1651,13 @@ ${model}
       $answerInput().disabled = false;
       $btnSubmit().disabled = false;
       $answerInput().focus();
+      // 语音/视频模式：恢复麦克风提示与可用态，提示用户可以开始回答
+      if (cfg && cfg.input !== 'text') {
+        const micBtn = document.getElementById('mic-btn');
+        if (micBtn) { micBtn.disabled = false; micBtn.innerHTML = '🎙️'; micBtn.classList.remove('recording'); }
+        const micHint = document.getElementById('mic-hint');
+        if (micHint) { micHint.textContent = '点击麦克风开始回答'; micHint.classList.remove('text-red-500'); micHint.classList.add('text-gray-500'); }
+      }
     }
 
     /** 禁用输入 */
@@ -2030,6 +2039,10 @@ ${model}
       document.getElementById('spectrum-canvas').classList.remove('hidden');
       document.getElementById('asr-retry-bubble').classList.add('hidden');
       document.getElementById('interim-bubble').classList.add('hidden');
+      // 醒目引导：告诉用户说完要点一下停止（自动停止只是兜底，嘈杂环境可能不触发）
+      const micHint = document.getElementById('mic-hint');
+      if (micHint) { micHint.textContent = '🔴 录音中 · 说完后点一下上面的按钮结束'; micHint.classList.add('text-red-500'); micHint.classList.remove('text-gray-500'); }
+      updateStatusCapsule('正在听你回答', '说完点按钮结束');
 
       try {
         if (!mediaStream) {
@@ -2056,23 +2069,33 @@ ${model}
         };
         recordStartTime = Date.now();
 
-        // 静音检测：只有检测到有效音量后才开始计数静音
+        // 静音检测：只有检测到有效音量后才开始计数静音（兜底手段，嘈杂环境未必触发，
+        // 所以主路径仍是引导用户手动点击停止）
         let silenceCount = 0;
+        let elapsedTicks = 0;
         const silenceCheck = setInterval(() => {
           if (!isRecording || !analyserNode) { clearInterval(silenceCheck); return; }
+          elapsedTicks++;
           const data = new Uint8Array(analyserNode.frequencyBinCount);
           analyserNode.getByteFrequencyData(data);
           const avg = data.reduce((a, b) => a + b, 0) / data.length;
-          if (avg >= 8) {
+          if (avg >= 12) {
             hasSpoken = true;
             silenceCount = 0;
           } else if (hasSpoken) {
             silenceCount++;
-            if (silenceCount >= 5) { // 5 × 500ms = 2.5 秒
+            if (silenceCount >= 5) { // 说过话后连续 2.5 秒安静 → 自动停止
               clearInterval(silenceCheck);
               console.log(LOG, '检测到静音，自动停止录音');
               stopRecording();
+              return;
             }
+          }
+          // 硬上限：单段录音最长 120 秒，防止嘈杂环境永不停止
+          if (elapsedTicks >= 240) {
+            clearInterval(silenceCheck);
+            console.log(LOG, '达到最长录音时长，自动停止');
+            stopRecording();
           }
         }, 500);
 
@@ -2121,6 +2144,8 @@ ${model}
       document.getElementById('ripple-1').classList.remove('animate');
       document.getElementById('ripple-2').classList.remove('animate');
       document.getElementById('spectrum-canvas').classList.add('hidden');
+      const micHintEl = document.getElementById('mic-hint');
+      if (micHintEl) { micHintEl.textContent = '正在识别你的回答…'; micHintEl.classList.remove('text-red-500'); micHintEl.classList.add('text-gray-500'); }
       updateStatusCapsule('正在识别你的回答…', '请稍候');
 
       // 停止频谱动画
