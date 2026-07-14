@@ -46,6 +46,7 @@ async function callAI(service, payload, timeoutMs) {
 
   const url = `${window.SUPABASE_URL}/functions/v1/ai-proxy`;
   const token = getAuthToken();
+  const anonKey = typeof window.SUPABASE_KEY === 'string' ? window.SUPABASE_KEY : '';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -60,6 +61,39 @@ async function callAI(service, payload, timeoutMs) {
       },
       body: JSON.stringify({ service, payload })
     });
+
+    // 401 + token 不是匿名 key → token 过期，用匿名 key 重试一次
+    if (response.status === 401 && token && anonKey && token !== anonKey) {
+      console.warn('[AIProxy] 401 detected, retrying with anon key');
+      clearTimeout(timer);
+      const retryController = new AbortController();
+      const retryTimer = setTimeout(() => retryController.abort(), timeoutMs);
+      try {
+        const retryResp = await fetch(url, {
+          method: 'POST',
+          signal: retryController.signal,
+          headers: {
+            'Authorization': `Bearer ${anonKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ service, payload })
+        });
+        clearTimeout(retryTimer);
+        let retryResult;
+        try { retryResult = await retryResp.json(); } catch { throw new Error('AI 服务返回数据异常，请稍后重试。'); }
+        if (!retryResp.ok) {
+          const message = retryResult && typeof retryResult.error === 'string'
+            ? retryResult.error
+            : `AI 服务请求失败（状态码 ${retryResp.status}），请稍后重试。`;
+          throw new Error(message);
+        }
+        return retryResult;
+      } catch (retryErr) {
+        clearTimeout(retryTimer);
+        if (retryErr.name === 'AbortError') throw new Error('AI 服务响应超时，请检查网络后重试');
+        throw retryErr;
+      }
+    }
 
     clearTimeout(timer);
 
