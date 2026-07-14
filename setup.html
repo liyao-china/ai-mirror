@@ -326,14 +326,14 @@
               <span class="text-[11px] text-orange-400 font-normal ml-1">每场需重新提供</span>
             </label>
             <textarea id="jd-text" rows="5" placeholder="请粘贴目标岗位的职位描述..." class="input-field w-full px-4 py-3 rounded-xl border border-gray-200 text-sm resize-y mb-2"></textarea>
-            <!-- 粘贴 / 上传图片区域 -->
-            <div id="jd-paste-zone" class="rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-300 transition-colors p-4 text-center cursor-pointer" onclick="document.getElementById('jd-image-input').click()">
+            <!-- 粘贴 / 上传图片区域（点击区域本身不再弹文件选择器，Ctrl+V 全页生效） -->
+            <div id="jd-paste-zone" class="rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-300 transition-colors p-4 text-center">
               <div class="text-sm text-gray-500">
-                <span class="text-primary font-medium">📋 直接 Ctrl+V 粘贴 JD 截图</span>
+                <span class="text-primary font-medium">📋 复制 JD 截图后，直接按 Ctrl+V（Mac 为 ⌘+V）即可自动解析</span>
                 <span class="text-gray-400 mx-1">或</span>
-                <button type="button" class="text-indigo-500 hover:text-indigo-700 transition-colors underline" onclick="event.stopPropagation(); document.getElementById('jd-image-input').click();">点击上传图片</button>
+                <button type="button" class="text-indigo-500 hover:text-indigo-700 transition-colors underline" onclick="document.getElementById('jd-image-input').click();">点击上传图片</button>
               </div>
-              <div class="text-[11px] text-gray-400 mt-1">粘贴或上传后，AI 会自动解析图片内容并填入上方</div>
+              <div class="text-[11px] text-gray-400 mt-1">在本页任意位置粘贴截图均可识别，解析结果自动填入上方文本框</div>
             </div>
             <input type="file" id="jd-image-input" accept="image/*" class="hidden">
             <!-- 粘贴图片预览 -->
@@ -1031,10 +1031,9 @@
         await doJDParse(file);
       });
 
-      // 支持在 JD 输入框、粘贴区域及整个 JD 区块粘贴图片
-      jdText.addEventListener('paste', handleJDPaste);
-      if (pasteZone) pasteZone.addEventListener('paste', handleJDPaste);
-      document.getElementById('jd-section').addEventListener('paste', handleJDPaste);
+      // 全页面级粘贴监听：不管焦点在哪，Ctrl+V 一张图片就能解析。
+      // （之前只挂在 JD 区块上，粘贴事件只在可编辑元素聚焦时触发，点了粘贴区再 Ctrl+V 根本收不到）
+      document.addEventListener('paste', handleJDPaste);
     }
 
     /** 处理粘贴事件 */

@@ -336,6 +336,11 @@
       <div class="text-xs font-semibold text-indigo-500 mb-1.5">🎙️ 面试官的问题</div>
       <div id="subtitle-text" class="text-sm text-gray-800 leading-relaxed"></div>
     </div>
+
+    <!-- 面试策略说明（常显小字） -->
+    <p class="mt-4 mx-auto max-w-xl w-full px-6 text-[11px] text-gray-400 leading-relaxed text-center">
+      💡 当前版本按所选时长结束面试。后续版本将不再严格限时：面试官会根据你的回答动态调整提问策略，直到对你的项目掌握度、技术深度与个人能力模型形成完整判断后自然收尾。
+    </p>
   </div>
 
   <!-- ============================================== -->
@@ -896,29 +901,17 @@
     // 渲染分段进度点
     // =============================================
     function renderProgressDots() {
+      // 面试不再按题数结束（按时长/面试官判断动态推进），进度点整体隐藏
       const container = $progressDots();
       container.innerHTML = '';
-      for (let i = 0; i < TOTAL_QUESTIONS; i++) {
-        const dot = document.createElement('span');
-        dot.className = 'progress-dot';
-        dot.id = 'dot-' + i;
-        if (i < qaRecords.length) {
-          dot.classList.add('done');
-        } else if (i === qaRecords.length) {
-          dot.classList.add('current');
-        } else {
-          dot.classList.add('pending');
-        }
-        container.appendChild(dot);
-      }
+      container.classList.add('hidden');
       updateQuestionCounter();
     }
 
-    /** 更新题号显示 */
+    /** 更新题号显示（不再显示总题数，面试按时长与面试官判断结束） */
     function updateQuestionCounter() {
       // currentQuestionIndex 从 0 开始，显示时 +1
-      const n = Math.min(currentQuestionIndex + 1, TOTAL_QUESTIONS);
-      $questionCounter().textContent = `问题 ${n} / ${TOTAL_QUESTIONS}`;
+      $questionCounter().textContent = `问题 ${currentQuestionIndex + 1}`;
     }
 
     /** 标记某题已完成 */
@@ -1232,11 +1225,6 @@ ${model}
         // 根据 cfg.input 初始化交互区显示
         initInputArea();
 
-        // 预加载过渡音频（语音/视频模式，不阻塞开场白）
-        if (cfg.input !== 'text') {
-          preloadTransitionAudios(roundKey);
-        }
-
         // 统一呈现开场白
         presentQuestion(openingText).then(() => {
           // push 进 messages
@@ -1248,6 +1236,12 @@ ${model}
           setAvatarState('listening');
           enableInput();
           startTimer();
+
+          // 过渡音频预加载放到开场白播完之后：
+          // 若与开场白 TTS 并发，会挤占合成通道导致前 1-2 题超时降级成机械音（声音不稳定的根因）
+          if (cfg.input !== 'text') {
+            setTimeout(() => preloadTransitionAudios(roundKey), 1500);
+          }
         }).catch(err => {
           console.error(LOG, '开场白出错:', err);
           // 兜底：直接显示完整文本并继续
@@ -1337,12 +1331,8 @@ ${model}
       // 存储到 localStorage（实时保存，防丢失）
       localStorage.setItem('qaRecords', JSON.stringify(qaRecords));
 
-      // 判断是否达到总题数
-      if (qaRecords.length >= TOTAL_QUESTIONS) {
-        if (!voiceText) isProcessingAnswer = false; // 文字模式释放
-        finishInterview(false);
-        return;
-      }
+      // 注意：面试不再按题数硬性结束。结束条件只有三个：
+      // ①倒计时归零 ②面试官判断充分后返回 [STATUS:END] ③用户提前结束
 
       // 语音/视频模式：先播放过渡音频（不阻塞），再后台出题
       if (cfg.input !== 'text') {
@@ -1638,7 +1628,8 @@ ${model}
             }
           };
 
-          // 兜底：如果音频 4 秒内仍未就绪，降级浏览器 TTS（500ms 太激进，远程音频经常误伤）
+          // 兜底：音频 10 秒仍未就绪才降级浏览器 TTS。
+          // 之前 4 秒太激进——首题合成+下载在弱网下常超 4 秒，被误降级成机械音（音色不稳定的另一根因）
           setTimeout(() => {
             if (!resolved && !fallbackStarted && audio && audio.readyState < 2) {
               fallbackStarted = true;
@@ -1646,7 +1637,7 @@ ${model}
               console.warn(LOG, '音频长时间未就绪，降级浏览器 TTS');
               doBrowserTTSFallback(text).then(doResolve).catch(doResolve);
             }
-          }, 4000);
+          }, 10000);
 
         } catch (err) {
           console.warn(LOG, 'TTS 请求失败:', err);
@@ -1754,7 +1745,7 @@ ${model}
       } else {
         // 已作答
         $modalEarlyTitle().textContent = '确认提前结束面试？';
-        $modalEarlyDesc().textContent = `你已回答 ${answered} / ${TOTAL_QUESTIONS} 个问题。提前结束后将基于已有回答生成报告，确定要结束吗？`;
+        $modalEarlyDesc().textContent = `你已回答 ${answered} 个问题。提前结束后将基于已有回答生成报告，确定要结束吗？`;
       }
 
       $modalEarlyEnd().classList.remove('hidden');
