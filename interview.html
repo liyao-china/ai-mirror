@@ -517,6 +517,36 @@
     const LOG = '[面试页]';
 
     // =============================================
+    // 调试面板：URL 加 ?debug=1 启用（左下角实时日志，无需开控制台）
+    // =============================================
+    (function initDebugPanel() {
+      if (!/[?&]debug=1/.test(location.search)) return;
+      const panel = document.createElement('div');
+      panel.id = 'debug-panel';
+      panel.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:9999;max-width:92vw;width:420px;max-height:38vh;overflow:auto;background:rgba(17,24,39,0.94);color:#a5f3fc;font:11px/1.6 Menlo,monospace;padding:8px 10px;border-radius:10px;white-space:pre-wrap;word-break:break-all;';
+      const mount = () => { if (document.body && !panel.parentNode) document.body.appendChild(panel); };
+      if (document.body) mount(); else document.addEventListener('DOMContentLoaded', mount);
+      const push = (color, args) => {
+        mount();
+        const line = document.createElement('div');
+        if (color) line.style.color = color;
+        let text = '';
+        for (const a of args) { try { text += (typeof a === 'string' ? a : JSON.stringify(a)) + ' '; } catch (e) { text += String(a) + ' '; } }
+        line.textContent = new Date().toTimeString().slice(0, 8) + ' ' + text;
+        panel.appendChild(line);
+        if (panel.childNodes.length > 200) panel.removeChild(panel.firstChild);
+        panel.scrollTop = panel.scrollHeight;
+      };
+      const ol = console.log.bind(console), ow = console.warn.bind(console), oe = console.error.bind(console);
+      console.log = (...a) => { ol(...a); push('', a); };
+      console.warn = (...a) => { ow(...a); push('#fde68a', a); };
+      console.error = (...a) => { oe(...a); push('#fca5a5', a); };
+      window.addEventListener('error', e => push('#fca5a5', ['JS错误: ' + e.message + ' @' + String(e.filename || '').split('/').pop() + ':' + e.lineno]));
+      window.addEventListener('unhandledrejection', e => push('#fca5a5', ['未处理Promise: ' + ((e.reason && e.reason.message) || e.reason)]));
+      push('#34d399', ['调试面板已启用 · 版本 v0715-watchdog']);
+    })();
+
+    // =============================================
     // 映射表
     // =============================================
     const jobNames = {
@@ -1973,6 +2003,33 @@ ${model}
     let hasSpoken = false;           // 本次录音中是否检测到过有效音量（新）
     let recordStartTime = 0;         // 本次录音开始时间戳（新）
     let isProcessingAnswer = false;  // 防重入：录音→识别→提交期间禁止重复触发（新）
+
+    // =============================================
+    // 状态看门狗：无论哪里出 bug，都不允许页面永久卡死
+    // - isProcessingAnswer 卡住超过 45 秒 → 强制复位并提示重试
+    // - 空闲状态下麦克风被误禁用 → 自动恢复
+    // =============================================
+    let processingSince = 0;
+    setInterval(function watchdog() {
+      if (isProcessingAnswer) {
+        if (!processingSince) processingSince = Date.now();
+        if (Date.now() - processingSince > 45000) {
+          console.error(LOG, '看门狗：回答处理超过45秒未完成，强制复位');
+          isProcessingAnswer = false;
+          processingSince = 0;
+          const b = document.getElementById('mic-btn');
+          if (b) { b.disabled = false; b.innerHTML = '🎙️'; b.classList.remove('recording'); }
+          const hint = document.getElementById('mic-hint');
+          if (hint) { hint.textContent = '处理超时，请点麦克风重新回答'; hint.classList.remove('text-red-500'); }
+          updateStatusCapsule('处理超时', '请重新回答或改用文字');
+        }
+      } else {
+        processingSince = 0;
+        // 空闲且未在录音，但按钮被禁用 → 修复（防止任何路径漏恢复）
+        const b = document.getElementById('mic-btn');
+        if (b && b.disabled && !isRecording) b.disabled = false;
+      }
+    }, 2000);
     let subtitleVisible = true;      // 字幕是否可见
 
     // 过渡音频缓存
