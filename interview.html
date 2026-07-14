@@ -2080,34 +2080,20 @@ ${model}
         };
         recordStartTime = Date.now();
 
-        // 静音检测：只有检测到有效音量后才开始计数静音
-        // 阈值 25（高于环境噪声），同时检测峰值以覆盖低音量说话
-        let silenceCount = 0;
+        // 【重要】不做静音自动停止——真实回答中句间停顿经常超过阈值，
+        // 自动停会把一段回答拦腰截断并引发状态错乱（用户以为还在录，其实已重开新录音）。
+        // 录音的结束只有两条路：用户点击按钮（主路径）/ 180 秒硬上限（兜底）。
         let elapsedTicks = 0;
         const silenceCheck = setInterval(() => {
-          if (!isRecording || !analyserNode) { clearInterval(silenceCheck); return; }
+          if (!isRecording) { clearInterval(silenceCheck); return; }
           elapsedTicks++;
-          const data = new Uint8Array(analyserNode.frequencyBinCount);
-          analyserNode.getByteFrequencyData(data);
-          const avg = data.reduce((a, b) => a + b, 0) / data.length;
-          const peak = Math.max(...data);
-          // 峰值或均值超过阈值 → 视为正在说话
-          if (peak >= 40 || avg >= 25) {
-            hasSpoken = true;
-            silenceCount = 0;
-          } else if (hasSpoken) {
-            silenceCount++;
-            if (silenceCount >= 5) { // 说过话后连续 2.5 秒安静 → 自动停止
-              clearInterval(silenceCheck);
-              console.log(LOG, '检测到静音，自动停止录音 (avg=' + avg.toFixed(1) + ', peak=' + peak + ')');
-              stopRecording();
-              return;
-            }
-          }
-          // 硬上限：单段录音最长 60 秒，防止嘈杂环境永不停止
-          if (elapsedTicks >= 120) {
+          // 提示条显示已录时长，让用户明确知道"正在录、说完要点按钮"
+          const hintEl = document.getElementById('mic-hint');
+          if (hintEl) hintEl.textContent = '🔴 录音中 ' + Math.floor(elapsedTicks / 2) + 's · 说完后点一下上面的按钮结束';
+          // 硬上限：单段录音最长 180 秒
+          if (elapsedTicks >= 360) {
             clearInterval(silenceCheck);
-            console.log(LOG, '达到最长录音时长(60s)，自动停止');
+            console.log(LOG, '达到最长录音时长(180s)，自动停止');
             stopRecording();
           }
         }, 500);
