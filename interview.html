@@ -1240,12 +1240,17 @@ ${model}
     // 提交回答
     // =============================================
     function submitAnswer(voiceText) {
-      // 防重入
-      if (isProcessingAnswer) {
+      // 防重入：仅文字模式需要在此拦截（语音模式的防重入由 stopRecording 管理）
+      // 当 voiceText 有值时说明是语音路径调用的，isProcessingAnswer 已由 stopRecording 设置
+      if (!voiceText && isProcessingAnswer) {
         console.warn(LOG, '正在处理中，忽略重复提交');
         return;
       }
-      isProcessingAnswer = true;
+      if (voiceText) {
+        // 语音路径：isProcessingAnswer 已被 stopRecording 设为 true，不重复设
+      } else {
+        isProcessingAnswer = true;
+      }
 
       // 语音模式传入识别文本，文字模式从输入框读取
       const text = (typeof voiceText === 'string' && voiceText.trim())
@@ -1254,7 +1259,7 @@ ${model}
 
       // 空文本拦截
       if (!text) {
-        isProcessingAnswer = false;
+        if (!voiceText) isProcessingAnswer = false; // 文字模式释放
         $statusPhrase().textContent = '还没有检测到回答内容';
         $statusPhrase().style.color = '#F59E0B';
         setTimeout(() => {
@@ -1289,7 +1294,7 @@ ${model}
 
       // 判断是否达到总题数
       if (qaRecords.length >= TOTAL_QUESTIONS) {
-        isProcessingAnswer = false;
+        if (!voiceText) isProcessingAnswer = false; // 文字模式释放
         finishInterview(false);
         return;
       }
@@ -1301,7 +1306,9 @@ ${model}
 
       // 请求下一个问题
       askNextQuestion();
-      isProcessingAnswer = false;
+      // 文字模式：submitAnswer 自己设的标志，自己释放
+      // 语音模式：stopRecording 的 finally 会释放，这里不重复
+      if (!voiceText) isProcessingAnswer = false;
     }
 
     // =============================================
@@ -2004,13 +2011,17 @@ ${model}
 
     /** 麦克风按钮点击切换 */
     function toggleMic() {
-      // 识别/出题处理中：明确提示，不要静默启动新录音（消除竞态与"点了没反应"）
+      // 录音中：优先停止（不管 isProcessingAnswer，因为录音中意味着还没进到识别阶段）
+      if (isRecording) {
+        stopRecording();
+        return;
+      }
+      // 识别/出题处理中：明确提示，不要静默启动新录音
       if (isProcessingAnswer) {
         updateStatusCapsule('正在识别你的回答…', '请稍候');
         return;
       }
-      if (isRecording) stopRecording();
-      else startRecording();
+      startRecording();
     }
 
     /** 开始录音 */
@@ -2039,7 +2050,7 @@ ${model}
       document.getElementById('spectrum-canvas').classList.remove('hidden');
       document.getElementById('asr-retry-bubble').classList.add('hidden');
       document.getElementById('interim-bubble').classList.add('hidden');
-      // 醒目引导：告诉用户说完要点一下停止（自动停止只是兜底，嘈杂环境可能不触发）
+      // 醒目引导：告诉用户说完要点一下停止
       const micHint = document.getElementById('mic-hint');
       if (micHint) { micHint.textContent = '🔴 录音中 · 说完后点一下上面的按钮结束'; micHint.classList.add('text-red-500'); micHint.classList.remove('text-gray-500'); }
       updateStatusCapsule('正在听你回答', '说完点按钮结束');
@@ -2069,8 +2080,8 @@ ${model}
         };
         recordStartTime = Date.now();
 
-        // 静音检测：只有检测到有效音量后才开始计数静音（兜底手段，嘈杂环境未必触发，
-        // 所以主路径仍是引导用户手动点击停止）
+        // 静音检测：只有检测到有效音量后才开始计数静音
+        // 阈值 25（高于环境噪声），同时检测峰值以覆盖低音量说话
         let silenceCount = 0;
         let elapsedTicks = 0;
         const silenceCheck = setInterval(() => {
@@ -2079,22 +2090,24 @@ ${model}
           const data = new Uint8Array(analyserNode.frequencyBinCount);
           analyserNode.getByteFrequencyData(data);
           const avg = data.reduce((a, b) => a + b, 0) / data.length;
-          if (avg >= 12) {
+          const peak = Math.max(...data);
+          // 峰值或均值超过阈值 → 视为正在说话
+          if (peak >= 40 || avg >= 25) {
             hasSpoken = true;
             silenceCount = 0;
           } else if (hasSpoken) {
             silenceCount++;
             if (silenceCount >= 5) { // 说过话后连续 2.5 秒安静 → 自动停止
               clearInterval(silenceCheck);
-              console.log(LOG, '检测到静音，自动停止录音');
+              console.log(LOG, '检测到静音，自动停止录音 (avg=' + avg.toFixed(1) + ', peak=' + peak + ')');
               stopRecording();
               return;
             }
           }
-          // 硬上限：单段录音最长 120 秒，防止嘈杂环境永不停止
-          if (elapsedTicks >= 240) {
+          // 硬上限：单段录音最长 60 秒，防止嘈杂环境永不停止
+          if (elapsedTicks >= 120) {
             clearInterval(silenceCheck);
-            console.log(LOG, '达到最长录音时长，自动停止');
+            console.log(LOG, '达到最长录音时长(60s)，自动停止');
             stopRecording();
           }
         }, 500);
@@ -2102,9 +2115,9 @@ ${model}
         // 在 mediaRecorder.onstop 中清理静音检测定时器
         mediaRecorder._silenceCheck = silenceCheck;
 
-        // 不用 timeslice：短录音在部分浏览器上分片模式会丢块导致空 blob；
-        // 无参 start() 时，stop() 会一次性把整段数据通过 ondataavailable 吐出
-        mediaRecorder.start();
+        // 用 1000ms timeslice：确保每秒都有数据块写入 audioChunks，
+        // 避免 stop() 后某些浏览器不触发 ondataavailable
+        mediaRecorder.start(1000);
 
         // 启动浏览器实时识别（可选增强）
         initSpeechRecognition();
@@ -2129,6 +2142,11 @@ ${model}
     async function stopRecording(discard) {
       if (!isRecording) return;
       isRecording = false;
+
+      // 立即设防重入标志，防止 stopRecording→submitVoiceAnswer 之间的竞态窗口
+      // （之前 isProcessingAnswer 只在 submitVoiceAnswer 里才设，用户在等 onstop 期间
+      //  点按钮会触发 startRecording，导致状态错乱）
+      if (!discard) isProcessingAnswer = true;
 
       // 清理静音检测
       if (mediaRecorder && mediaRecorder._silenceCheck) {
@@ -2161,12 +2179,14 @@ ${model}
 
       // 必须等待 MediaRecorder 真正停止并收集完最后一段数据（3 秒兜底防止挂起）
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        console.log(LOG, '等待 MediaRecorder.onstop, state=', mediaRecorder.state);
         await new Promise(resolve => {
-          const timer = setTimeout(resolve, 3000);
-          mediaRecorder.onstop = () => { clearTimeout(timer); resolve(); };
+          const timer = setTimeout(() => {
+            console.warn(LOG, 'MediaRecorder.onstop 超时(3s)，强制继续');
+            resolve();
+          }, 3000);
+          mediaRecorder.onstop = () => { clearTimeout(timer); console.log(LOG, 'MediaRecorder.onstop 触发'); resolve(); };
           try {
-            // 先强制 flush 一次数据，再 stop，避免极短录音丢块
-            try { mediaRecorder.requestData(); } catch (e) {}
             mediaRecorder.stop();
           } catch (e) { clearTimeout(timer); resolve(); }
         });
@@ -2177,24 +2197,34 @@ ${model}
       const fullBlob = audioChunks.length > 0
         ? new Blob(audioChunks, { type: mimeType })
         : null;
+      console.log(LOG, '录音合并完成, chunks=', audioChunks.length, 'size=', fullBlob ? fullBlob.size : 0);
       audioChunks = [];
       mediaRecorder = null;
 
       // 面试结束等场景：只停止录音，不做识别提交
       if (discard) {
+        isProcessingAnswer = false;
         micBtn.disabled = false;
         return;
       }
 
       // 提交识别
-      await submitVoiceAnswer(fullBlob);
+      try {
+        await submitVoiceAnswer(fullBlob);
+      } catch (err) {
+        console.error(LOG, 'submitVoiceAnswer 未捕获异常:', err);
+        showAsrError();
+      } finally {
+        isProcessingAnswer = false;
+        micBtn.disabled = false;
+      }
     }
 
-    /** 提交语音回答（整段识别） */
+    /** 提交语音回答（整段识别）
+     *  注意：isProcessingAnswer 由调用方 stopRecording 设置和释放，
+     *  这里不再重复管理，避免双重 finally 导致状态错乱。
+     */
     async function submitVoiceAnswer(blob) {
-      if (isProcessingAnswer) return;
-      isProcessingAnswer = true;
-
       let text = '';
 
       try {
@@ -2203,7 +2233,7 @@ ${model}
           console.warn(LOG, '录音数据过小/为空, size=', blob ? blob.size : 0);
           // 若浏览器实时识别抓到了内容，直接用它
           const bi = browserInterimText.trim();
-          if (bi) { isProcessingAnswer = false; submitAnswer(bi); return; }
+          if (bi) { submitAnswer(bi); return; }
           updateStatusCapsule('没听清你的回答', '请点麦克风重新回答');
           showAsrError('这段录音太短或没有声音，请再说一次（靠近麦克风、说完再点停止）。');
           return;
@@ -2234,8 +2264,6 @@ ${model}
         text = corrected || text;
 
         console.log(LOG, 'ASR 识别成功:', text.substring(0, 50));
-        // 必须先释放防重入标志，否则 submitAnswer 开头的检查会直接 return（死锁）
-        isProcessingAnswer = false;
         submitAnswer(text);
 
       } catch (err) {
@@ -2245,18 +2273,12 @@ ${model}
         text = browserInterimText.trim();
         if (text) {
           console.log(LOG, '回退浏览器识别文本:', text.substring(0, 50));
-          isProcessingAnswer = false;
           submitAnswer(text);
           return;
         }
 
         // 彻底失败：在 mic-area 内显示可见错误控件
         showAsrError();
-      } finally {
-        isProcessingAnswer = false;
-        // 恢复麦克风按钮
-        const micBtn = document.getElementById('mic-btn');
-        if (micBtn) micBtn.disabled = false;
       }
     }
 
