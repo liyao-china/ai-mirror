@@ -622,9 +622,82 @@
     const $qaBubbleList = () => document.getElementById('qa-bubble-list');
 
     // =============================================
-    // 初始化
+    // 头像 SVG 模板（男/女两套，动画类名一致）
+    // 必须定义在 init IIFE 之前：init 里会调用 setAvatarByRound，
+    // const 存在暂时性死区，放在后面会导致整个初始化崩溃（页面卡"准备中"）
     // =============================================
-    (function init() {
+
+    /** 男性卡通 SVG（mentor / director） */
+    const AVATAR_SVG_MALE = `
+      <!-- 头发（深色短发） -->
+      <ellipse cx="100" cy="72" rx="38" ry="30" fill="#374151"/>
+      <ellipse cx="100" cy="65" rx="36" ry="22" fill="#4B5563"/>
+      <!-- 脸型 -->
+      <ellipse cx="100" cy="88" rx="30" ry="32" fill="#FDDCB5"/>
+      <!-- 眉毛 + 眼睛（avatar-eyes 类用于眨眼动画） -->
+      <g class="avatar-eyes" style="transform-origin: center;">
+        <path d="M82 78 Q86 74 90 78" stroke="#374151" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <path d="M110 78 Q114 74 118 78" stroke="#374151" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <circle cx="86" cy="88" r="4" fill="#374151"/>
+        <circle cx="114" cy="88" r="4" fill="#374151"/>
+        <circle cx="87.5" cy="86.5" r="1.2" fill="white"/>
+        <circle cx="115.5" cy="86.5" r="1.2" fill="white"/>
+      </g>
+      <!-- 嘴巴（avatar-mouth 类用于说话动画） -->
+      <g style="transform-origin: 100px 108px;">
+        <path class="avatar-mouth" d="M92 108 Q100 116 108 108" stroke="#B97A56" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- 西装 -->
+      <path d="M60 135 Q65 130 80 128 L100 126 L120 128 Q135 130 140 135 L150 190 L50 190 Z" fill="#1F2937"/>
+      <!-- 衬衫领口 -->
+      <path d="M88 126 L100 145 L112 126" fill="white" stroke="#E5E7EB" stroke-width="0.5"/>
+      <!-- 领带 -->
+      <polygon points="98,132 102,132 103,158 100,162 97,158" fill="#6366F1"/>
+    `;
+
+    /** 女性卡通 SVG（leader / hr）——长发、同风格西装 */
+    const AVATAR_SVG_FEMALE = `
+      <!-- 长发（两侧垂下 + 顶部弧形） -->
+      <path d="M62 88 Q58 60 80 52 Q100 46 120 52 Q142 60 138 88 L135 120 Q130 115 125 110 L125 85 Q125 65 100 60 Q75 65 75 85 L75 110 Q70 115 65 120 Z" fill="#1F2937"/>
+      <!-- 刘海 -->
+      <path d="M72 72 Q78 58 100 55 Q122 58 128 72 L125 78 Q120 68 100 65 Q80 68 75 78 Z" fill="#374151"/>
+      <!-- 脸型 -->
+      <ellipse cx="100" cy="88" rx="28" ry="30" fill="#FDDCB5"/>
+      <!-- 眉毛 + 眼睛（类名与男性一致，动画复用） -->
+      <g class="avatar-eyes" style="transform-origin: center;">
+        <path d="M84 78 Q88 74 92 78" stroke="#374151" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <path d="M108 78 Q112 74 116 78" stroke="#374151" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <circle cx="88" cy="88" r="3.5" fill="#374151"/>
+        <circle cx="112" cy="88" r="3.5" fill="#374151"/>
+        <circle cx="89.2" cy="86.8" r="1" fill="white"/>
+        <circle cx="113.2" cy="86.8" r="1" fill="white"/>
+      </g>
+      <!-- 嘴巴（类名一致） -->
+      <g style="transform-origin: 100px 108px;">
+        <path class="avatar-mouth" d="M93 108 Q100 115 107 108" stroke="#C47A6A" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- 西装（V 领收腰） -->
+      <path d="M65 135 Q70 130 82 128 L100 126 L118 128 Q130 130 135 135 L145 190 L55 190 Z" fill="#1F2937"/>
+      <!-- 衬衫 V 领 -->
+      <path d="M90 126 L100 140 L110 126" fill="white" stroke="#E5E7EB" stroke-width="0.5"/>
+      <!-- 项链点缀（替代领带） -->
+      <circle cx="100" cy="138" r="2" fill="#6366F1"/>
+    `;
+
+    /** 根据轮次切换头像 SVG，与 voiceByRound 性别一致 */
+    function setAvatarByRound(roundKey) {
+      const femaleRounds = ['leader', 'hr'];
+      const svg = document.getElementById('avatar-svg');
+      if (!svg) return;
+      const isFemale = femaleRounds.includes(roundKey);
+      svg.innerHTML = isFemale ? AVATAR_SVG_FEMALE : AVATAR_SVG_MALE;
+    }
+
+    // =============================================
+    // 初始化（函数体在此声明，实际调用在脚本最末尾——
+    // 必须等全部 const/let 声明完再执行，否则语音/视频模式会因暂时性死区崩溃）
+    // =============================================
+    function initInterviewPage() {
       console.log(LOG, '页面初始化');
 
       // 读取面试配置
@@ -698,7 +771,7 @@
         // 文字模式：直接开始
         startInterviewAfterAuth();
       }
-    })();
+    }
 
     /** 页面加载时预先初始化底部交互区（防止视频/语音模式下先显示文字框） */
     function preInitInputArea() {
@@ -847,76 +920,6 @@
     }
 
     /** 设置面试官头像状态 */
-    // =============================================
-    // 头像 SVG 模板（男/女两套，动画类名一致）
-    // =============================================
-
-    /** 男性卡通 SVG（mentor / director） */
-    const AVATAR_SVG_MALE = `
-      <!-- 头发（深色短发） -->
-      <ellipse cx="100" cy="72" rx="38" ry="30" fill="#374151"/>
-      <ellipse cx="100" cy="65" rx="36" ry="22" fill="#4B5563"/>
-      <!-- 脸型 -->
-      <ellipse cx="100" cy="88" rx="30" ry="32" fill="#FDDCB5"/>
-      <!-- 眉毛 + 眼睛（avatar-eyes 类用于眨眼动画） -->
-      <g class="avatar-eyes" style="transform-origin: center;">
-        <path d="M82 78 Q86 74 90 78" stroke="#374151" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        <path d="M110 78 Q114 74 118 78" stroke="#374151" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        <circle cx="86" cy="88" r="4" fill="#374151"/>
-        <circle cx="114" cy="88" r="4" fill="#374151"/>
-        <circle cx="87.5" cy="86.5" r="1.2" fill="white"/>
-        <circle cx="115.5" cy="86.5" r="1.2" fill="white"/>
-      </g>
-      <!-- 嘴巴（avatar-mouth 类用于说话动画） -->
-      <g style="transform-origin: 100px 108px;">
-        <path class="avatar-mouth" d="M92 108 Q100 116 108 108" stroke="#B97A56" stroke-width="2" fill="none" stroke-linecap="round"/>
-      </g>
-      <!-- 西装 -->
-      <path d="M60 135 Q65 130 80 128 L100 126 L120 128 Q135 130 140 135 L150 190 L50 190 Z" fill="#1F2937"/>
-      <!-- 衬衫领口 -->
-      <path d="M88 126 L100 145 L112 126" fill="white" stroke="#E5E7EB" stroke-width="0.5"/>
-      <!-- 领带 -->
-      <polygon points="98,132 102,132 103,158 100,162 97,158" fill="#6366F1"/>
-    `;
-
-    /** 女性卡通 SVG（leader / hr）——长发、同风格西装 */
-    const AVATAR_SVG_FEMALE = `
-      <!-- 长发（两侧垂下 + 顶部弧形） -->
-      <path d="M62 88 Q58 60 80 52 Q100 46 120 52 Q142 60 138 88 L135 120 Q130 115 125 110 L125 85 Q125 65 100 60 Q75 65 75 85 L75 110 Q70 115 65 120 Z" fill="#1F2937"/>
-      <!-- 刘海 -->
-      <path d="M72 72 Q78 58 100 55 Q122 58 128 72 L125 78 Q120 68 100 65 Q80 68 75 78 Z" fill="#374151"/>
-      <!-- 脸型 -->
-      <ellipse cx="100" cy="88" rx="28" ry="30" fill="#FDDCB5"/>
-      <!-- 眉毛 + 眼睛（类名与男性一致，动画复用） -->
-      <g class="avatar-eyes" style="transform-origin: center;">
-        <path d="M84 78 Q88 74 92 78" stroke="#374151" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <path d="M108 78 Q112 74 116 78" stroke="#374151" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-        <circle cx="88" cy="88" r="3.5" fill="#374151"/>
-        <circle cx="112" cy="88" r="3.5" fill="#374151"/>
-        <circle cx="89.2" cy="86.8" r="1" fill="white"/>
-        <circle cx="113.2" cy="86.8" r="1" fill="white"/>
-      </g>
-      <!-- 嘴巴（类名一致） -->
-      <g style="transform-origin: 100px 108px;">
-        <path class="avatar-mouth" d="M93 108 Q100 115 107 108" stroke="#C47A6A" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-      </g>
-      <!-- 西装（V 领收腰） -->
-      <path d="M65 135 Q70 130 82 128 L100 126 L118 128 Q130 130 135 135 L145 190 L55 190 Z" fill="#1F2937"/>
-      <!-- 衬衫 V 领 -->
-      <path d="M90 126 L100 140 L110 126" fill="white" stroke="#E5E7EB" stroke-width="0.5"/>
-      <!-- 项链点缀（替代领带） -->
-      <circle cx="100" cy="138" r="2" fill="#6366F1"/>
-    `;
-
-    /** 根据轮次切换头像 SVG，与 voiceByRound 性别一致 */
-    function setAvatarByRound(roundKey) {
-      const femaleRounds = ['leader', 'hr'];
-      const svg = document.getElementById('avatar-svg');
-      if (!svg) return;
-      const isFemale = femaleRounds.includes(roundKey);
-      svg.innerHTML = isFemale ? AVATAR_SVG_FEMALE : AVATAR_SVG_MALE;
-    }
-
     function setAvatarState(state) {
       const avatar = $avatarMain();
       // 移除所有动画 class
@@ -2848,6 +2851,11 @@ ${model}
       const msg = names[err.name] || '麦克风启动失败：' + (err.message || '未知错误');
       alert('⚠️ ' + msg);
     }
+
+    // =============================================
+    // 启动入口：脚本全部声明就绪后才初始化（勿移到前面）
+    // =============================================
+    initInterviewPage();
   </script>
 </body>
 </html>
