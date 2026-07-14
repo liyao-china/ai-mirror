@@ -2138,10 +2138,14 @@ ${model}
         source.connect(analyserNode);
         drawSpectrum();
 
-        // MediaRecorder：整段录音，1000ms timeslice 定期收集数据
+        // MediaRecorder：只喂音频轨。视频模式下 mediaStream 含摄像头视频轨，
+        // 直接塞给纯音频 MIME 的录音器会抛 "Failed to execute start on MediaRecorder"
+        const audioTracks = mediaStream.getAudioTracks();
+        if (!audioTracks.length) throw new DOMException('没有可用的麦克风音轨', 'NotFoundError');
+        const audioOnlyStream = new MediaStream(audioTracks);
         const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
           .find(t => MediaRecorder.isTypeSupported(t)) || '';
-        mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : {});
+        mediaRecorder = new MediaRecorder(audioOnlyStream, mimeType ? { mimeType } : {});
 
         mediaRecorder.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
@@ -2560,6 +2564,8 @@ ${model}
     let segFgCtx = null;              // 前景临时上下文
     let segIsLoading = false;         // 模型加载中标志
     let segLastFrameTime = 0;         // 上一帧时间戳（FPS 限制）
+    let segGotFirstResult = false;    // 是否已渲染出第一帧（未出帧前不切换画布，防黑屏）
+    let segFirstFrameTimer = null;    // 首帧超时定时器（8 秒未出帧回退原始画面）
 
     /** 视频模式主入口：弹出授权流程 */
     function videoAuthFlow() {
@@ -2740,10 +2746,20 @@ ${model}
       };
 
       if (effect === 'blur') {
-        // 启动 MediaPipe 背景虚化
-        localVideo.style.display = 'none';
-        if (segCanvas) segCanvas.style.display = 'block';
+        // 启动 MediaPipe 背景虚化。
+        // 注意：不能立刻隐藏原始视频——模型从 CDN 加载需要数秒（弱网可能失败），
+        // 提前切换画布会黑屏。等 onSegmentationResults 出第一帧再切换（见 segGotFirstResult）。
+        segGotFirstResult = false;
+        localVideo.style.filter = 'none';
         startSegmentation();
+        // 8 秒还没出第一帧 → 判定模型加载失败，回退原始画面
+        if (segFirstFrameTimer) clearTimeout(segFirstFrameTimer);
+        segFirstFrameTimer = setTimeout(() => {
+          if (videoEffect === 'blur' && !segGotFirstResult) {
+            console.warn(LOG, '虚化模型 8 秒未出帧，回退原始画面');
+            showSegFallback('当前网络无法加载虚化模型，已恢复原始画面');
+          }
+        }, 8000);
       } else {
         // 停止虚化，恢复原始 video
         stopSegmentation();
@@ -2818,6 +2834,11 @@ ${model}
         cancelAnimationFrame(segRafId);
         segRafId = null;
       }
+      if (segFirstFrameTimer) {
+        clearTimeout(segFirstFrameTimer);
+        segFirstFrameTimer = null;
+      }
+      segGotFirstResult = false;
     }
 
     /** 按约 15-20 FPS 调度下一帧 */
@@ -2844,6 +2865,16 @@ ${model}
     /** MediaPipe 分割结果回调 */
     function onSegmentationResults(results) {
       if (videoEffect !== 'blur' || !segCtx || !segCanvas) return;
+
+      // 第一帧结果到达：此刻才把原始视频切换为处理画布（避免加载期黑屏）
+      if (!segGotFirstResult) {
+        segGotFirstResult = true;
+        if (segFirstFrameTimer) { clearTimeout(segFirstFrameTimer); segFirstFrameTimer = null; }
+        if (localVideo) localVideo.style.display = 'none';
+        segCanvas.style.display = 'block';
+        console.log(LOG, '虚化首帧渲染成功，切换到处理画布');
+      }
+
       const w = segCanvas.width;
       const h = segCanvas.height;
 
