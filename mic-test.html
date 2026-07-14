@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>麦克风自检 - AI面镜</title>
+  <style>
+    body { font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #F9FAFB; color: #111827; max-width: 640px; margin: 0 auto; padding: 24px 16px; }
+    h1 { font-size: 20px; }
+    button { background: linear-gradient(135deg, #6366F1, #8B5CF6); color: white; border: none; border-radius: 12px; padding: 14px 28px; font-size: 16px; font-weight: 600; cursor: pointer; width: 100%; margin: 12px 0; }
+    button:disabled { opacity: 0.5; }
+    #log { background: #111827; color: #E5E7EB; border-radius: 12px; padding: 14px; font-size: 13px; line-height: 1.7; font-family: Menlo, monospace; white-space: pre-wrap; word-break: break-all; min-height: 200px; }
+    .ok { color: #34D399; } .err { color: #F87171; } .info { color: #A5B4FC; }
+    p.tip { font-size: 13px; color: #6B7280; }
+  </style>
+</head>
+<body>
+  <h1>🎙️ 麦克风链路自检</h1>
+  <p class="tip">点击按钮 → 允许麦克风权限 → 大声说一句话（如"我叫某某，应聘AI产品经理"）→ 5 秒后自动停止并识别。全部结果显示在下方黑框里，请截图发给开发者。</p>
+  <button id="btn" onclick="runTest()">开始自检（录 5 秒）</button>
+  <div id="log">等待开始…</div>
+
+  <script src="supabase-config.js"></script>
+  <script src="ai-client.js"></script>
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg, cls) {
+      const time = new Date().toTimeString().slice(0, 8);
+      logEl.innerHTML += `\n<span class="${cls || ''}">[${time}] ${msg}</span>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function runTest() {
+      const btn = document.getElementById('btn');
+      btn.disabled = true;
+      logEl.innerHTML = '开始自检…';
+      log('浏览器: ' + navigator.userAgent.substring(0, 90), 'info');
+
+      try {
+        // 步骤 1：麦克风权限
+        log('① 请求麦克风权限…');
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const track = stream.getAudioTracks()[0];
+          log('① ✅ 麦克风就绪: ' + (track ? track.label || '(无名称)' : '无音轨'), 'ok');
+        } catch (e) {
+          log('① ❌ 麦克风失败: ' + e.name + ' — ' + e.message, 'err');
+          log('→ 请检查浏览器地址栏和系统设置里的麦克风权限', 'err');
+          btn.disabled = false;
+          return;
+        }
+
+        // 步骤 2：录音 5 秒
+        const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+        log('② 开始录音 5 秒，MIME: ' + (mimeType || '(浏览器默认)') + ' —— 请现在大声说话！');
+        const chunks = [];
+        const rec = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+        rec.ondataavailable = e => { if (e.data && e.data.size > 0) { chunks.push(e.data); log('  收到音频块 #' + chunks.length + ': ' + e.data.size + ' bytes', 'info'); } };
+
+        await new Promise(resolve => {
+          rec.onstop = resolve;
+          rec.start(1000);
+          setTimeout(() => { try { rec.requestData(); rec.stop(); } catch(e) { resolve(); } }, 5000);
+          setTimeout(resolve, 8000); // 兜底
+        });
+        stream.getTracks().forEach(t => t.stop());
+
+        const blob = chunks.length ? new Blob(chunks, { type: mimeType || 'audio/webm' }) : null;
+        if (!blob || blob.size < 1200) {
+          log('② ❌ 录音数据异常: chunks=' + chunks.length + ', size=' + (blob ? blob.size : 0), 'err');
+          log('→ 麦克风没有采集到声音。检查：系统声音输入设备是否正确、输入音量、是否有其他应用占用', 'err');
+          btn.disabled = false;
+          return;
+        }
+        log('② ✅ 录音完成: ' + chunks.length + ' 块, 共 ' + Math.round(blob.size/1024) + 'KB', 'ok');
+
+        // 步骤 3：转 base64
+        log('③ 转换音频格式…');
+        const dataUrl = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+        log('③ ✅ 转换完成, dataURL 长度 ' + Math.round(dataUrl.length/1024) + 'K 字符', 'ok');
+
+        // 步骤 4：云端识别
+        log('④ 调用云端语音识别（最长 30 秒）…');
+        const t0 = Date.now();
+        try {
+          const text = await Promise.race([
+            AIProxy.asr(dataUrl, '这是一段中文自我介绍测试'),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('ASR 30秒超时')), 30000))
+          ]);
+          const ms = Date.now() - t0;
+          if (text && String(text).trim()) {
+            log('④ ✅ 识别成功 (' + ms + 'ms):', 'ok');
+            log('   「' + String(text).trim() + '」', 'ok');
+            log('🎉 全链路正常！如果面试页仍卡住，问题在面试页逻辑，请把本截图发给开发者', 'ok');
+          } else {
+            log('④ ⚠️ 识别返回为空 (' + ms + 'ms)——音频送达了但没识别出文字（可能声音太小）', 'err');
+          }
+        } catch (e) {
+          log('④ ❌ 云端识别失败 (' + (Date.now()-t0) + 'ms): ' + e.message, 'err');
+          log('→ 若显示"额度"相关信息则今日额度用尽；若网络错误请检查网络', 'err');
+        }
+      } catch (e) {
+        log('❌ 未预期异常: ' + (e.stack || e.message), 'err');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
