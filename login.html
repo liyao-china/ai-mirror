@@ -192,8 +192,9 @@
         if (session) {
           console.log('[登录页] 检测到已有登录会话，自动跳转');
           window.location.href = 'profile.html';
-        } catch (e) {
-          console.warn('[登录页] 检查会话失败:', e);
+        }
+      } catch (e) {
+        console.warn('[登录页] 检查会话失败:', e);
       }
     }
 
